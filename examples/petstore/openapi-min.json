@@ -1,0 +1,59 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Petstore (minimal)", "version": "1.0.0" },
+  "paths": {
+    "/pet/findByStatus": {
+      "get": {
+        "operationId": "findPetsByStatus",
+        "summary": "Find pets by status (available/pending/sold).",
+        "tags": ["pet"],
+        "parameters": [
+          { "name": "status", "in": "query", "required": true,
+            "schema": { "type": "string", "enum": ["available", "pending", "sold"] },
+            "description": "Status to filter by." }
+        ]
+      }
+    },
+    "/pet/{petId}": {
+      "get": {
+        "operationId": "getPetById",
+        "summary": "Get a pet by its ID.",
+        "tags": ["pet"],
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true,
+            "schema": { "type": "integer" }, "description": "Pet id." }
+        ]
+      },
+      "delete": {
+        "operationId": "deletePet",
+        "summary": "Delete a pet by ID (destructive).",
+        "tags": ["pet"],
+        "parameters": [
+          { "name": "petId", "in": "path", "required": true,
+            "schema": { "type": "integer" }, "description": "Pet id to delete." }
+        ]
+      }
+    },
+    "/store/order": {
+      "post": {
+        "operationId": "placeOrder",
+        "summary": "Place an order for a pet.",
+        "tags": ["store"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "petId": { "type": "integer", "description": "Pet to order." },
+                  "quantity": { "type": "integer", "description": "How many." }
+                },
+                "required": ["petId"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

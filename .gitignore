@@ -1,0 +1,27 @@
+# Secrets — never commit
+.env
+*.key
+*.pem
+secrets/
+secrets.*
+
+# Agent runtime state (memory, embedding cache)
+.any2agent-state/
+
+# Generated per-project artifacts (reproducible via `any2agent init/connect`)
+*.toolspec.json
+*.any2agent.toml
+!examples/**/openapi-min.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# Virtualenv (keep any venv inside the repo gitignored)
+.venv/
+venv/
+env/

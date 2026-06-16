@@ -1,0 +1,132 @@
+"""Generic REST adapter (httpx). Builds the request from base_url + backing.path
+(filling {path} params), routes remaining args to query (GET/DELETE) or JSON body
+(POST/PUT/PATCH), and applies pluggable auth from config. Credentials come from
+env vars named in the auth block — never from the spec or config file.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+from typing import Any, Dict
+from urllib.parse import urlencode
+
+try:
+    import httpx  # type: ignore
+except Exception:  # pragma: no cover
+    httpx = None  # type: ignore
+
+from ..spec import ToolSpec
+from .base import Adapter
+
+_PATH_VAR = re.compile(r"\{([^}]+)\}")
+_BODY_METHODS = {"POST", "PUT", "PATCH"}
+
+
+class RestAdapter(Adapter):
+    def __init__(self, base_url: str, auth: Dict[str, Any] | None = None, timeout: float = 20.0):
+        self.base_url = (base_url or "").rstrip("/")
+        self.auth = auth or {"type": "none"}
+        self.timeout = timeout
+
+    def _headers(self, ctx: Dict[str, Any] | None = None) -> Dict[str, str]:
+        h = {"Accept": "application/json"}
+        a = self.auth or {}
+        t = a.get("type", "none")
+        ctx = ctx or {}
+
+        if t == "passthrough":
+            # Forward the logged-in USER's own credential (no standing creds) so the
+            # target's RBAC applies to the user's role. The server populates ctx with
+            # the caller's inbound headers: ctx["in_headers"] (lower-cased) + ctx["cookie"].
+            in_h = {k.lower(): v for k, v in (ctx.get("in_headers") or {}).items()}
+            if a.get("carrier") == "bearer":
+                name = a.get("header", "Authorization")
+                raw = in_h.get(name.lower()) or ctx.get("bearer")
+                if raw:
+                    # forward as-is (preserves 'Bearer ' or custom token scheme)
+                    h[name] = raw if (" " in raw or name.lower() != "authorization") else ("Bearer " + raw)
+            else:  # cookie
+                cookie = _filter_cookie(ctx.get("cookie") or in_h.get("cookie", ""),
+                                        a.get("cookie_prefixes") or [], a.get("cookie_names") or [])
+                if cookie:
+                    h["Cookie"] = cookie
+            return h
+
+        token = os.getenv(a.get("token_env", "")) if a.get("token_env") else None
+        if t == "bearer" and token:
+            h["Authorization"] = "Bearer " + token
+        elif t == "api_key_header" and token:
+            h[a.get("header", "X-API-Key")] = token
+        elif t == "cookie" and token:
+            h["Cookie"] = a.get("name", "SESSION") + "=" + token
+        return h
+
+    def call(self, spec: ToolSpec, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+        if httpx is None:
+            return {"ok": False, "error": "httpx not installed"}
+        method = (spec.backing.get("method") or "GET").upper()
+        path = spec.backing.get("path") or "/"
+        merged = {**(spec.defaults or {}), **_clean(args)}
+
+        # fill path params
+        used = set()
+        def _sub(m):
+            k = m.group(1)
+            used.add(k)
+            return str(merged.get(k, m.group(0)))
+        url = self.base_url + _PATH_VAR.sub(_sub, path)
+
+        rest = {k: v for k, v in merged.items() if k not in used and v is not None}
+        body = None
+        if method in _BODY_METHODS:
+            body = rest
+        elif rest:
+            url = url + ("&" if "?" in url else "?") + urlencode({k: _scalar(v) for k, v in rest.items()})
+
+        try:
+            with httpx.Client(timeout=self.timeout) as cli:
+                resp = cli.request(method, url, headers=self._headers(ctx),
+                                   json=body if body is not None else None)
+            ct = resp.headers.get("content-type", "")
+            data: Any
+            if "application/json" in ct:
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = resp.text[:4000]
+            else:
+                data = resp.text[:4000]
+            ok = 200 <= resp.status_code < 300
+            out = {"ok": ok, "status": resp.status_code, "data": data}
+            if not ok:
+                out["error"] = "http_%d" % resp.status_code
+            return out
+        except Exception as e:  # connection refused / timeout / dns
+            return {"ok": False, "error": str(e)}
+
+
+def _filter_cookie(raw: str, prefixes, names) -> str:
+    """From an inbound Cookie header, keep only the auth cookies to forward.
+    Empty prefixes+names = forward everything (best-effort when scheme unknown)."""
+    if not raw:
+        return ""
+    if not prefixes and not names:
+        return raw
+    keep = []
+    for part in raw.split(";"):
+        kv = part.strip()
+        nm = kv.split("=", 1)[0].strip()
+        if nm in (names or []) or any(nm.startswith(p) for p in (prefixes or [])):
+            keep.append(kv)
+    return "; ".join(keep)
+
+
+def _clean(d):
+    return d if isinstance(d, dict) else {}
+
+
+def _scalar(v):
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, ensure_ascii=False)
+    return v
