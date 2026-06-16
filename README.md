@@ -2,6 +2,11 @@
 
 **Point it at your project. Get a working AI agent.**
 
+[![CI](https://github.com/vibeuniv/any2agent/actions/workflows/ci.yml/badge.svg)](https://github.com/vibeuniv/any2agent/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 `any2agent` reads your app's API — from an OpenAPI contract *or straight from the
 source code* — figures out the routes **and the authentication**, builds a tool
 set, **verifies it against your live API**, and serves a chat agent. No glue code.
@@ -10,6 +15,12 @@ set, **verifies it against your live API**, and serves a chat agent. No glue cod
 your codebase ──▶ any2agent connect ──▶ a chat agent that calls your API
                   (scan → verify → repair, until it works)
 ```
+
+<!-- DEMO: replace with an asciinema/GIF of `any2agent connect` once recorded.
+     Suggested 30s flow: connect → framework+auth detected → verify PASS → chat.
+     ![any2agent demo](docs/demo.gif) -->
+> 🎥 **Demo:** _coming soon_ — `any2agent connect` detecting a Next.js app's
+> Supabase auth, verifying 45 endpoints, and serving a chat agent.
 
 Most "OpenAPI → tool" projects stop at "you bring a spec." `any2agent` is different:
 

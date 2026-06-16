@@ -38,8 +38,9 @@ dotenv = ["python-dotenv"]
 any2agent = "any2agent.cli:main"
 
 [project.urls]
-Homepage = "https://example.com/any2agent"
-Repository = "https://example.com/any2agent"
+Homepage = "https://github.com/vibeuniv/any2agent"
+Repository = "https://github.com/vibeuniv/any2agent"
+Issues = "https://github.com/vibeuniv/any2agent/issues"
 
 [tool.setuptools.packages.find]
 include = ["any2agent*"]
