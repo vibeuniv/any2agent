@@ -103,7 +103,7 @@ Re-run `connect`/`init` whenever your API changes.
 
 ---
 
-## Models (pick any, key-gated)
+## Models — every major LLM platform (via LiteLLM)
 
 A model appears in the chat picker **only when its key is set** — set one or many.
 
@@ -112,7 +112,24 @@ A model appears in the chat picker **only when its key is set** — set one or m
 | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` |
 | Anthropic (Claude) | `ANTHROPIC_API_KEY` | `CLAUDE_MODEL` |
 | Google (Gemini) | `GEMINI_API_KEY` | `GEMINI_MODEL` |
+| Mistral | `MISTRAL_API_KEY` | `MISTRAL_MODEL` |
+| Groq | `GROQ_API_KEY` | `GROQ_MODEL` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` |
+| xAI (Grok) | `XAI_API_KEY` | `XAI_MODEL` |
 | Moonshot (Kimi) | `MOONSHOT_API_KEY` | `KIMI_MODEL` |
+| Cohere | `COHERE_API_KEY` | `COHERE_MODEL` |
+| Perplexity | `PERPLEXITYAI_API_KEY` | `PERPLEXITY_MODEL` |
+| Together AI | `TOGETHERAI_API_KEY` | `TOGETHER_MODEL` |
+| OpenRouter (200+ models) | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` |
+| Ollama (local) | `OLLAMA_HOST` | `OLLAMA_MODEL` |
+
+**Anything else** (Azure OpenAI, AWS Bedrock, Vertex AI, or any other
+[LiteLLM-supported](https://docs.litellm.ai/docs/providers) model) — no code change:
+
+```bash
+export ANY2AGENT_MODELS="azure/my-deploy, bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0"
+```
+(LiteLLM reads each provider's own credentials from the environment.)
 
 Tip: `cp .env.example .env` and fill in what you have. No key at all? Scanning
 and verifying still work — only the chat needs a model.

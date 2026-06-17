@@ -24,8 +24,10 @@ First public release. Point it at a project, get a verified chat agent.
   liveness (read-only live probes), and agent tool-selection (`agent_e2e`).
 - **Repair** (`llm_repair.py`) — deterministic path-param fill + LLM parameter
   synthesis and description rewriting, with a call budget. Dead tools quarantined.
-- **Multi-model serving** — OpenAI / Anthropic / Gemini / Moonshot via LiteLLM;
-  a model appears only when its key is set. Write/danger confirm gate.
+- **Multi-model serving (every major platform)** — OpenAI, Anthropic, Gemini, Mistral,
+  Groq, DeepSeek, xAI (Grok), Moonshot, Cohere, Perplexity, Together, OpenRouter,
+  and local Ollama via LiteLLM — a model appears only when its key is set. Plus a
+  generic `ANY2AGENT_MODELS` hook for Azure/Bedrock/Vertex/any LiteLLM model. Write/danger confirm gate.
 - **CLI** — `init`, `scan`, `serve`, `connect`. Artifacts named per project
   (`<project>.toolspec.json`, `<project>.any2agent.toml`).
 - Petstore example, Apache-2.0 license.
