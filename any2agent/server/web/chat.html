@@ -1,54 +1,138 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{PROJECT}} Agent</title>
+<title>{{PROJECT}} · any2agent</title>
 <style>
-  :root{--ink:#1f2328;--mut:#656d76;--line:#d0d7de;--bg:#fff;--user:#eef3fb;--accent:#0969da}
+  :root{
+    --ink:#0f1419; --mut:#5b6470; --line:#e6e8eb; --bg:#fbfcfd; --card:#fff;
+    --user:#eef4ff; --accent:#2f6df6; --accent-d:#1f57d6; --ok:#16a34a; --warn:#b45309;
+    --g1:#2f6df6; --g2:#7c5cff; --g3:#e0529c;
+    --shadow:0 1px 2px rgba(16,20,30,.06),0 8px 24px rgba(16,20,30,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--ink:#e7eaee;--mut:#9aa3af;--line:#262b33;--bg:#0d1117;--card:#161b22;
+          --user:#1b2435;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);}
+  }
   *{box-sizing:border-box}
-  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo",sans-serif;color:var(--ink);background:var(--bg)}
-  header{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
-  header .nm{font-weight:700}
-  .chip{font-size:12px;color:var(--mut);background:#f6f8fa;border:1px solid var(--line);border-radius:10px;padding:3px 9px;cursor:pointer;user-select:none}
-  .chip:hover{background:#eef1f4}
-  .menu{position:absolute;top:46px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;min-width:200px;display:none;z-index:50}
+  html,body{height:100%}
+  body{margin:0;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Apple SD Gothic Neo",sans-serif;
+       color:var(--ink);background:var(--bg);display:flex;flex-direction:column;height:100vh}
+
+  /* header */
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);
+         background:var(--card);position:relative;z-index:20}
+  .logo{width:30px;height:30px;border-radius:9px;flex:0 0 auto;
+        background:conic-gradient(from 200deg,var(--g1),var(--g2),var(--g3),var(--g1));
+        display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;box-shadow:var(--shadow)}
+  .brand{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+  .brand .nm{font-weight:700;font-size:15px}
+  .brand .sub{font-size:11.5px;color:var(--mut)}
+  .spacer{flex:1}
+  .chip{font-size:12.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:999px;
+        padding:5px 11px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;transition:.12s}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .chip .car{font-size:9px;opacity:.6}
+  .menu{position:absolute;top:54px;right:20px;background:var(--card);border:1px solid var(--line);border-radius:14px;
+        box-shadow:var(--shadow);padding:6px;min-width:230px;display:none;z-index:50}
   .menu.open{display:block}
-  .menu .mi{padding:8px 10px;border-radius:7px;font-size:13px;cursor:pointer;display:flex;gap:8px}
-  .menu .mi:hover{background:#f6f8fa} .menu .mi.sel{font-weight:700;background:#eef6ff}
-  .wrap{max-width:820px;margin:0 auto;padding:18px}
-  .turn{margin:16px 0}
-  .me{display:flex;justify-content:flex-end}
-  .me .b{background:var(--user);border-radius:14px;padding:10px 14px;max-width:80%;white-space:pre-wrap}
-  .bot .body{white-space:normal}
-  .bot .body ul{margin:6px 0;padding-left:20px}
-  .bot .body code{background:#f0f1f3;border-radius:4px;padding:1px 5px;font-size:13px}
-  .tool{color:var(--mut);font-size:12.5px;margin:4px 0;font-family:ui-monospace,Menlo,monospace}
-  .confirm{border:1px solid #d29922;background:#fff8e6;border-radius:10px;padding:10px 12px;margin:8px 0}
-  .confirm button{margin-right:8px;padding:5px 12px;border-radius:7px;border:1px solid var(--line);cursor:pointer}
-  .confirm .yes{background:var(--accent);color:#fff;border-color:var(--accent)}
-  footer{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 18px}
-  .row{max-width:820px;margin:0 auto;display:flex;gap:8px}
-  textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;height:44px}
-  .send{padding:0 16px;border:0;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+  .menu .mi{padding:9px 11px;border-radius:9px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px}
+  .menu .mi:hover{background:var(--bg)} .menu .mi.sel{background:var(--user)}
+  .menu .mi .ck{width:14px;color:var(--accent);font-weight:800;visibility:hidden}
+  .menu .mi.sel .ck{visibility:visible}
+  .menu .mi .mt{font-weight:600} .menu .mi .mm{color:var(--mut);font-size:11.5px;margin-left:auto}
+  .menu .empty{padding:10px 12px;font-size:12.5px;color:var(--mut)}
+
+  /* conversation */
+  .conv{flex:1;overflow-y:auto}
+  .col{max-width:780px;margin:0 auto;padding:22px 20px 8px}
+  .turn{margin:18px 0;display:flex;gap:12px;align-items:flex-start}
+  .turn.me{justify-content:flex-end}
+  .turn.me .b{background:var(--user);border-radius:16px 16px 4px 16px;padding:11px 15px;max-width:80%;
+              white-space:pre-wrap;word-break:break-word}
+  .spark{width:28px;height:28px;border-radius:50%;flex:0 0 auto;margin-top:1px;
+         background:conic-gradient(from 200deg,var(--g1),var(--g2),var(--g3),var(--g1));
+         display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+  .spark.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+  .bot .body{flex:1;min-width:0;padding-top:3px;word-break:break-word}
+  .bot .body>div{margin:3px 0} .bot .body ul{margin:6px 0;padding-left:20px} .bot .body li{margin:3px 0}
+  .bot .body a{color:var(--accent);text-decoration:none} .bot .body a:hover{text-decoration:underline}
+  .bot .body code{background:var(--user);border-radius:5px;padding:1px 6px;font-size:13px;
+                  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .bot .body strong{font-weight:650}
+  .tool{margin:6px 0 6px 40px;font-size:12.5px;color:var(--mut);display:inline-flex;align-items:center;gap:7px;
+        background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 11px;
+        font-family:ui-monospace,Menlo,monospace;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .confirm{margin:8px 0 8px 40px;border:1px solid #e3b341;background:rgba(227,179,65,.1);border-radius:12px;padding:12px 14px}
+  .confirm .msg{margin-bottom:10px}
+  .confirm button{margin-right:8px;padding:6px 14px;border-radius:9px;border:1px solid var(--line);cursor:pointer;
+                  font:inherit;font-size:13px;background:var(--card);color:var(--ink)}
+  .confirm .yes{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+  .confirm .yes:hover{background:var(--accent-d)}
+
+  /* empty state */
+  .hero{max-width:780px;margin:0 auto;padding:9vh 20px 0;text-align:center}
+  .hero .ico{width:56px;height:56px;border-radius:16px;margin:0 auto 18px;
+             background:conic-gradient(from 200deg,var(--g1),var(--g2),var(--g3),var(--g1));
+             display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px;box-shadow:var(--shadow)}
+  .hero h1{font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.2px}
+  .hero p{color:var(--mut);margin:0 0 24px}
+  .sugs{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .sug{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 15px;font-size:13.5px;
+       cursor:pointer;color:var(--ink);transition:.12s;text-align:left;max-width:240px}
+  .sug:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+
+  /* composer */
+  .foot{border-top:1px solid var(--line);background:var(--card);padding:14px 20px}
+  .row{max-width:780px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;
+       background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:8px 8px 8px 16px;transition:.12s}
+  .row:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,109,246,.12)}
+  textarea{flex:1;resize:none;border:0;background:transparent;color:var(--ink);font:inherit;outline:none;
+           max-height:160px;line-height:1.5;padding:6px 0}
+  .send{width:36px;height:36px;flex:0 0 auto;border:0;border-radius:12px;background:var(--accent);color:#fff;
+        cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:.12s}
+  .send:hover{background:var(--accent-d)} .send:disabled{opacity:.4;cursor:default}
+  .hint{max-width:780px;margin:8px auto 0;font-size:11px;color:var(--mut);text-align:center}
 </style>
 </head>
 <body>
 <header>
-  <span class="nm">{{PROJECT}}</span>
-  <span class="chip" id="modelChip" title="Change model">model ▾</span>
+  <div class="logo">✦</div>
+  <div class="brand"><span class="nm">{{PROJECT}}</span><span class="sub" id="sub">any2agent · API agent</span></div>
+  <div class="spacer"></div>
+  <span class="chip" id="modelChip" title="Change model">model <span class="car">▾</span></span>
   <div class="menu" id="modelMenu"></div>
 </header>
-<div class="wrap" id="col"></div>
-<footer><div class="row">
-  <textarea id="inp" placeholder="Type a message…"></textarea>
-  <button class="send" id="send">➤</button>
-</div></footer>
+
+<div class="conv">
+  <div class="hero" id="hero">
+    <div class="ico">✦</div>
+    <h1>{{PROJECT}} agent</h1>
+    <p>Ask anything about your API — I'll call the right endpoints for you.</p>
+    <div class="sugs" id="sugs">
+      <div class="sug">List what I can do</div>
+      <div class="sug">Show recent items</div>
+      <div class="sug">Help me find something</div>
+    </div>
+  </div>
+  <div class="col" id="col"></div>
+</div>
+
+<div class="foot">
+  <div class="row">
+    <textarea id="inp" rows="1" placeholder="Type a message…"></textarea>
+    <button class="send" id="send" disabled>➤</button>
+  </div>
+  <div class="hint">Write/delete actions ask for confirmation before running.</div>
+</div>
+
 <script>
 var MODELS=[], DEFAULT_ID=null, selectedModelId=localStorage.getItem('any2agent_model')||null;
 var col=document.getElementById('col'), inp=document.getElementById('inp');
 var chip=document.getElementById('modelChip'), menu=document.getElementById('modelMenu');
-var history=[];
+var hero=document.getElementById('hero'), sendBtn=document.getElementById('send'), sub=document.getElementById('sub');
+var convo=[], busy=false;
 
 function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function linkify(h){
@@ -69,68 +153,79 @@ function md(t){
 }
 function chipLabel(){
   var m=MODELS.find(function(x){return x.id===(selectedModelId||DEFAULT_ID);});
-  chip.textContent=(m?m.label:'model')+' ▾';
+  chip.innerHTML=(m?m.label:'model')+' <span class="car">▾</span>';
 }
 function renderMenu(){
   menu.innerHTML='';
-  if(!MODELS.length){menu.innerHTML='<div class="mi">No models available (set a provider key)</div>';return;}
+  if(!MODELS.length){menu.innerHTML='<div class="empty">No models available — set a provider key (e.g. OPENAI_API_KEY)</div>';return;}
   MODELS.forEach(function(m){
-    var d=document.createElement('div'); d.className='mi'+(m.id===(selectedModelId||DEFAULT_ID)?' sel':'');
-    d.textContent=(m.id===(selectedModelId||DEFAULT_ID)?'✓ ':'  ')+m.label+'  ('+m.model+')';
+    var on=m.id===(selectedModelId||DEFAULT_ID);
+    var d=document.createElement('div'); d.className='mi'+(on?' sel':'');
+    d.innerHTML='<span class="ck">✓</span><span class="mt"></span><span class="mm"></span>';
+    d.querySelector('.mt').textContent=m.label; d.querySelector('.mm').textContent=m.model;
     d.onclick=function(){selectedModelId=m.id;localStorage.setItem('any2agent_model',m.id);chipLabel();renderMenu();menu.classList.remove('open');};
     menu.appendChild(d);
   });
 }
-chip.onclick=function(){renderMenu();menu.classList.toggle('open');};
+chip.onclick=function(e){e.stopPropagation();renderMenu();menu.classList.toggle('open');};
+document.addEventListener('click',function(){menu.classList.remove('open');});
 
 fetch('info').then(function(r){return r.json();}).then(function(d){
   MODELS=d.models||[]; DEFAULT_ID=d.default_model_id; chipLabel();
+  if(d.project) sub.textContent='any2agent · '+(d.tools||0)+' tools';
 });
 
-function addMe(t){var d=document.createElement('div');d.className='turn me';d.innerHTML='<div class="b">'+esc(t)+'</div>';col.appendChild(d);scroll();}
-function addBot(){var d=document.createElement('div');d.className='turn bot';d.innerHTML='<div class="body"></div>';col.appendChild(d);scroll();return d.querySelector('.body');}
-function scroll(){window.scrollTo(0,document.body.scrollHeight);}
+function setBusy(b){busy=b;sendBtn.disabled=b||!inp.value.trim();sendBtn.innerHTML=b?'…':'➤';}
+function addMe(t){hero.style.display='none';var d=document.createElement('div');d.className='turn me';d.innerHTML='<div class="b">'+esc(t)+'</div>';col.appendChild(d);scrollDown();}
+function addBot(){var d=document.createElement('div');d.className='turn bot';d.innerHTML='<div class="spark spin"></div><div class="body"></div>';col.appendChild(d);scrollDown();return d;}
+function scrollDown(){var c=document.querySelector('.conv');c.scrollTop=c.scrollHeight;}
 
-function send(){
-  var t=inp.value.trim(); if(!t)return; inp.value='';
-  addMe(t); history.push({role:'user',content:t});
-  var body=addBot(); var acc='';
-  var payload={messages:history}; if(selectedModelId)payload.model_id=selectedModelId;
+function send(text){
+  var t=(text!==undefined?text:inp.value).trim(); if(!t||busy)return;
+  inp.value=''; autosize(); setBusy(true);
+  addMe(t); convo.push({role:'user',content:t});
+  var turn=addBot(), body=turn.querySelector('.body'), acc='';
+  var payload={messages:convo}; if(selectedModelId)payload.model_id=selectedModelId;
   fetch('chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
   .then(function(resp){
     var reader=resp.body.getReader(), dec=new TextDecoder(), buf='';
     function pump(){return reader.read().then(function(res){
-      if(res.done){ if(acc)history.push({role:'assistant',content:acc}); return; }
+      if(res.done){ if(acc)convo.push({role:'assistant',content:acc}); turn.querySelector('.spark').classList.remove('spin'); setBusy(false); return; }
       buf+=dec.decode(res.value,{stream:true});
       var parts=buf.split('\n\n'); buf=parts.pop();
       parts.forEach(function(p){
         var line=p.split('\n').find(function(x){return x.indexOf('data: ')===0;});
         if(!line)return; var ev; try{ev=JSON.parse(line.slice(6));}catch(e){return;}
         if(ev.type==='delta'){acc+=ev.text; body.innerHTML=md(acc);}
-        else if(ev.type==='tool'){var s=document.createElement('div');s.className='tool';s.textContent='🔧 '+ev.name+' '+JSON.stringify(ev.args);col.insertBefore(s,body.parentNode.nextSibling);}
-        else if(ev.type==='confirm'){renderConfirm(ev);}
-        scroll();
+        else if(ev.type==='tool'){var s=document.createElement('div');s.className='tool';s.textContent='🔧 '+ev.name;turn.parentNode.insertBefore(s,turn.nextSibling);}
+        else if(ev.type==='confirm'){renderConfirm(ev,turn);}
+        scrollDown();
       });
       return pump();
     });}
     return pump();
-  });
+  }).catch(function(){turn.querySelector('.spark').classList.remove('spin');body.innerHTML='<div style="color:var(--warn)">Connection error.</div>';setBusy(false);});
 }
-function renderConfirm(ev){
-  var d=document.createElement('div');d.className='turn';
-  d.innerHTML='<div class="confirm">'+esc(ev.message||('Confirm: '+ev.name))+'<br><br>'
-    +'<button class="yes">Run</button><button class="no">Cancel</button></div>';
-  col.appendChild(d);scroll();
+function renderConfirm(ev,after){
+  var d=document.createElement('div');d.className='confirm';
+  d.innerHTML='<div class="msg">'+esc(ev.message||('Confirm: '+ev.name))+'</div>'
+    +'<button class="yes">Run</button><button class="no">Cancel</button>';
+  after.parentNode.insertBefore(d,after.nextSibling);scrollDown();
   d.querySelector('.yes').onclick=function(){
+    d.querySelector('.msg').textContent='Running…';
     fetch('confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:ev.name,args:ev.args})})
     .then(function(r){return r.json();}).then(function(res){
-      d.querySelector('.confirm').innerHTML='✅ Done: '+esc(JSON.stringify(res).slice(0,400));
+      d.innerHTML='<div class="msg">✅ Done: '+esc(JSON.stringify(res).slice(0,400))+'</div>';
     });
   };
-  d.querySelector('.no').onclick=function(){d.querySelector('.confirm').innerHTML='Cancelled.';};
+  d.querySelector('.no').onclick=function(){d.innerHTML='<div class="msg" style="color:var(--mut)">Cancelled.</div>';};
 }
-document.getElementById('send').onclick=send;
+
+function autosize(){inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,160)+'px';}
+inp.addEventListener('input',function(){autosize();sendBtn.disabled=busy||!inp.value.trim();});
 inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+sendBtn.onclick=function(){send();};
+Array.prototype.forEach.call(document.querySelectorAll('#sugs .sug'),function(s){s.onclick=function(){send(s.textContent);};});
 </script>
 </body>
 </html>
