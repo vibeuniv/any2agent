@@ -52,8 +52,8 @@ any2agent/
 ## Pull requests
 
 1. Branch from `main`.
-2. Make sure `python -m compileall any2agent` passes and the offline smoke in
-   `.github/workflows/ci.yml` still works.
+2. Make sure `python -m compileall any2agent` passes and `any2agent init` on
+   `examples/petstore/openapi-min.json` still produces a tool set.
 3. Describe what you changed and (for scanners/auth) which stack you tested against.
 
 ## License
