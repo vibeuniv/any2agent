@@ -16,8 +16,14 @@ your project ──▶  any2agent connect  ──▶  a chat agent that calls yo
                   scan → verify → repair (loops until it actually works)
 ```
 
-> 🎥 **Demo:** _coming soon_ — connecting a Next.js + Supabase app, verifying
-> 45 endpoints, and serving a chat agent in under a minute.
+### The agent it serves
+
+<img src="docs/chat-ui.png" alt="any2agent chat UI" width="100%">
+
+A clean, multi-model chat over **your** API — read tools run instantly, write/delete
+actions pause for confirmation, and every call carries the logged-in user's session.
+
+> 🎥 A full terminal demo (`connect` → auto-detected auth → verify → chat) is coming soon.
 
 ---
 
