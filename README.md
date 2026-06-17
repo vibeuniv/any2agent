@@ -23,7 +23,10 @@ your project ──▶  any2agent connect  ──▶  a chat agent that calls yo
 A clean, multi-model chat over **your** API — read tools run instantly, write/delete
 actions pause for confirmation, and every call carries the logged-in user's session.
 
-> 🎥 A full terminal demo (`connect` → auto-detected auth → verify → chat) is coming soon.
+<!-- After rendering: ![demo](docs/demo.gif)  —  `brew install vhs && vhs demo.tape` -->
+> 🎥 Terminal demo (`connect` → auto-detected auth → verify): run `vhs demo.tape`
+> (see [`demo.tape`](demo.tape)). Try it yourself on the included
+> [`examples/notes-api`](examples/notes-api).
 
 ---
 

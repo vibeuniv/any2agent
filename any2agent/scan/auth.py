@@ -51,7 +51,15 @@ _HDR_AUTHISH = ("authorization", "token", "auth", "key", "access", "session", "j
 _UNPASSABLE = ("sigv4", "aws4-hmac", "x-amz-", "hmac", "createhmac", "x509", "mtls", "client-cert")
 
 
-def _candidate_files(root: str, cap: int = 140) -> List[str]:
+# common app entrypoints — auth code often lives here (single-file/small apps),
+# not in a path containing an auth keyword.
+_ENTRYPOINTS = ("middleware.ts", "middleware.js", "package.json",
+                "main.py", "app.py", "server.py", "__init__.py", "settings.py", "deps.py",
+                "index.js", "index.ts", "app.js", "app.ts", "server.js", "server.ts",
+                "main.go", "app.rb", "application.rb")
+
+
+def _candidate_files(root: str, cap: int = 160) -> List[str]:
     out = []
     for dp, dns, fns in os.walk(root):
         dns[:] = [d for d in dns if d not in _SKIP]
@@ -59,7 +67,7 @@ def _candidate_files(root: str, cap: int = 140) -> List[str]:
             if not fn.lower().endswith(_EXTS):
                 continue
             rel = os.path.relpath(os.path.join(dp, fn), root).lower()
-            if fn.lower() in ("middleware.ts", "middleware.js", "package.json") or any(h in rel for h in _AUTH_HINT):
+            if fn.lower() in _ENTRYPOINTS or any(h in rel for h in _AUTH_HINT):
                 out.append(os.path.join(dp, fn))
             if len(out) >= cap:
                 return out
