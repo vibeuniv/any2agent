@@ -6,7 +6,7 @@ Three layers, increasingly general:
   2. carrier EXTRACTION — find which cookies/headers the code actually reads from
      inbound requests (framework-agnostic; works even on unknown/custom stacks)
   3. LLM fallback — when 1+2 are still low/unknown, ask an LLM to read the auth
-     files and produce the plan (needs a provider key; "AI가 알아서")
+     files and produce the plan (needs a provider key)
 
 Output (config.auth) for passthrough:
   type=passthrough, scheme, carrier(cookie|bearer), cookie_prefixes/cookie_names,
@@ -193,12 +193,13 @@ def _llm_auth(texts, root, model_id=None) -> Dict[str, Any] | None:
                     key=lambda kv: -sum(kv[1].lower().count(h) for h in _AUTH_HINT))[:6]
     snippet = "\n\n".join("// %s\n%s" % (os.path.relpath(p, root), t[:2500]) for p, t in picked)
     prompt = (
-        "이 프로젝트의 인증 로직을 보고, 로그인한 사용자의 세션/토큰을 어떻게 백엔드 호출에 "
-        "passthrough 할지 판단해서 JSON만 출력해라. 키: "
+        "Read this project's authentication logic and decide HOW to pass the logged-in "
+        "user's session/token through to backend calls. Output JSON ONLY with keys: "
         '{"scheme": str, "carrier": "cookie"|"bearer", "cookie_names": [str], '
         '"cookie_prefixes": [str], "header": str, "role_source": str}. '
-        "carrier=cookie면 forward할 쿠키명/접두사, bearer면 헤더명(보통 Authorization). "
-        "확실치 않으면 가장 가능성 높은 값. JSON 외 텍스트 금지.\n\n" + snippet
+        "If carrier=cookie, give the cookie name(s)/prefix(es) to forward; if bearer, the header "
+        "name (usually Authorization). If unsure, give the most likely value. No prose, JSON only.\n\n"
+        + snippet
     )
     try:
         resp = registry.completion(model_string, [{"role": "user", "content": prompt}],
@@ -233,8 +234,8 @@ def analyze(root: str, use_llm: bool = True, model_id=None) -> Dict[str, Any]:
 
     # flag fundamentally non-passthrough auth (signed/mTLS)
     if any(k in blob for k in _UNPASSABLE):
-        plan["warning"] = ("서명요청(HMAC/SigV4) 또는 mTLS 흔적 — 토큰 포워딩 passthrough로는 불가, "
-                           "전용 adapter 필요.")
+        plan["warning"] = ("Signed-request (HMAC/SigV4) or mTLS detected — can't be done by token "
+                           "passthrough; a custom adapter is required.")
 
     low_conf = plan.get("confidence") in ("low",) or plan.get("scheme") == "unknown"
     if low_conf and use_llm:

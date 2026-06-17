@@ -71,8 +71,8 @@ def cmd_init(args):
     print("       toolspec -> %s" % ts_path)
     print("       config   -> %s" % cfg_path)
     if not cfg.base_url:
-        print("       ⚠ base_url 미설정 — %s 의 base_url 을 대상 API 주소로 채우세요." % cfg_path)
-    print("       다음:  any2agent serve --project %s" % ts.project)
+        print("       ⚠ base_url is empty — set base_url in %s to your target API." % cfg_path)
+    print("       next:  any2agent serve --project %s" % ts.project)
 
 
 def cmd_connect(args):
@@ -84,7 +84,7 @@ def cmd_serve(args):
     project = _derive_project(args.project)
     cfg_path = project + ".any2agent.toml"
     if not os.path.exists(cfg_path):
-        print("[serve] %s 없음. 먼저 `any2agent init` 을 실행하세요." % cfg_path, file=sys.stderr)
+        print("[serve] %s not found. Run `any2agent init` first." % cfg_path, file=sys.stderr)
         sys.exit(1)
     cfg = AgentConfig.load(cfg_path)
     ts = ToolSet.load(cfg.toolspec_path())

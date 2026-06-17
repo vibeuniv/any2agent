@@ -29,8 +29,8 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
     ctx = ctx or {}
     entry, model_string, rid = registry.resolve(model_id, prefer_default)
     if not entry:
-        yield {"type": "delta", "text": "사용 가능한 LLM provider 키가 없습니다. "
-               "OPENAI_API_KEY 등 provider 키를 설정하면 대화가 활성화됩니다."}
+        yield {"type": "delta", "text": "No LLM provider key is set. "
+               "Set a provider key (e.g. OPENAI_API_KEY) to enable chat."}
         yield {"type": "done", "model": None}
         return
 
@@ -47,7 +47,7 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
         try:
             stream = registry.completion(model_string, msgs, tools=tools_payload, stream=True, extra=extra)
         except Exception as e:
-            yield {"type": "delta", "text": "LLM 호출 오류: %s" % e}
+            yield {"type": "delta", "text": "LLM call error: %s" % e}
             yield {"type": "done", "model": rid}
             return
 

@@ -7,151 +7,184 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-`any2agent` reads your app's API — from an OpenAPI contract *or straight from the
-source code* — figures out the routes **and the authentication**, builds a tool
-set, **verifies it against your live API**, and serves a chat agent. No glue code.
+any2agent turns an existing API-backed project into a chat agent — **without you
+writing any glue code**. It reads your API (from an OpenAPI file *or your source
+code*), works out the routes **and how you authenticate users**, builds a tool
+set, **checks it against your live API**, and serves a chat UI.
 
 ```
-your codebase ──▶ any2agent connect ──▶ a chat agent that calls your API
-                  (scan → verify → repair, until it works)
+your project ──▶  any2agent connect  ──▶  a chat agent that calls your API
+                  scan → verify → repair (loops until it actually works)
 ```
 
-<!-- DEMO: replace with an asciinema/GIF of `any2agent connect` once recorded.
-     Suggested 30s flow: connect → framework+auth detected → verify PASS → chat.
-     ![any2agent demo](docs/demo.gif) -->
-> 🎥 **Demo:** _coming soon_ — `any2agent connect` detecting a Next.js app's
-> Supabase auth, verifying 45 endpoints, and serving a chat agent.
-
-Most "OpenAPI → tool" projects stop at "you bring a spec." `any2agent` is different:
-
-- 🔎 **Reads source, not just specs** — no OpenAPI file? It scans your code
-  (FastAPI, Flask, Express, NestJS, Spring, Next.js…) and extracts the routes.
-- 🔐 **Understands your auth** — detects how you log users in (Supabase, NextAuth,
-  Spring Security, JWT, session cookies, custom headers…) and **passes the
-  end-user's own session through**, so your existing roles/permissions (RBAC)
-  apply. The agent gets **no extra privileges**.
-- ✅ **Verifies itself** — a generate → verify → repair loop checks coverage,
-  correctness, and live calls, and fixes gaps until it passes (or tells you
-  honestly what's left).
-- 🤖 **Any model** — OpenAI, Claude, Gemini, Kimi. A model shows up only when its
-  API key is set.
+> 🎥 **Demo:** _coming soon_ — connecting a Next.js + Supabase app, verifying
+> 45 endpoints, and serving a chat agent in under a minute.
 
 ---
 
-## 60-second quickstart
+## Why it's different
+
+Most "OpenAPI → tools" projects need you to **already have a spec** and stop
+there. any2agent goes further:
+
+| | Others | **any2agent** |
+|---|:---:|:---:|
+| Input | OpenAPI spec only | **Spec OR your source tree** |
+| Auth / permissions | you wire it | **detected from your code, user session passed through (RBAC kept)** |
+| Correctness | trust the output | **verify → repair loop with an honest report** |
+| Onboarding | manual | **one `connect` command** |
+
+---
+
+## Install
 
 ```bash
-# 1. Install
-pip install any2agent          # or: pip install git+https://github.com/<you>/any2agent
+pip install any2agent
+# or the latest:  pip install git+https://github.com/vibeuniv/any2agent
+```
 
-# 2. Set ONE model key (any of these)
+---
+
+## Quickstart (2 steps)
+
+```bash
+# 1) one model key — any one of these
 export OPENAI_API_KEY=...     # or ANTHROPIC_API_KEY / GEMINI_API_KEY / MOONSHOT_API_KEY
 
-# 3. Connect your project — interactive wizard does the rest
+# 2) connect — the wizard asks a few questions and does the rest
+cd /path/to/your-project
 any2agent connect
-#   ? project path           → ./my-app
-#   ? live API base URL      → http://localhost:3000   (it even guesses this)
-#   ? verify with live calls → y
-#   → scans, builds tools, verifies, and starts a chat agent
 ```
 
-Open the printed URL and chat with your API. Done.
+What you'll see (real output):
 
-> Prefer one command? `any2agent connect --path ./my-app --base-url http://localhost:3000 --live`
+```text
+[connect] guessed base URL (from source): http://localhost:3000
+[connect] auth analysis: scheme=supabase-ssr carrier=cookie confidence=high
+  -> passthrough the user's session cookie(s): ['sb-']
+[connect] scanning: /path/to/your-project
+  framework=nextjs  routes=45
+[connect] verify round 1/4  (live=False)
+  [PASS] coverage  45/45 (100%)  missing=0
+  [PASS] accuracy  checked=45 bad=0
+[connect] ✅ all checks passed
+[connect] wrote: yourapp.toolspec.json (tools=45 write=21 danger=2), yourapp.any2agent.toml
+```
+
+Then start the chat:
+
+```bash
+any2agent serve --project yourapp     # → http://127.0.0.1:8800
+```
+
+Open the URL and talk to your API. **That's it.**
 
 ---
 
-## Already have an OpenAPI spec?
+## Three ways to connect
 
-Skip straight to tools — no source scan needed:
+| You have… | Use | Command |
+|---|---|---|
+| Just the source code | **`connect`** (scans code) | `any2agent connect --path ./app --base-url http://localhost:3000` |
+| An OpenAPI / Swagger spec | **`init`** (fast path) | `any2agent init --openapi ./openapi.json --project app --base-url https://api.app.com` |
+| A spec, tools only (no run) | **`scan`** | `any2agent scan --openapi ./openapi.json --project app` |
 
-```bash
-any2agent init --openapi https://petstore3.swagger.io/api/v3/openapi.json \
-             --project petstore \
-             --base-url https://petstore3.swagger.io/api/v3
-any2agent serve --project petstore        # → http://127.0.0.1:8800
-```
-
-A full runnable example lives in [`examples/petstore`](examples/petstore).
+Runnable example: [`examples/petstore`](examples/petstore).
 
 ---
 
 ## What it generates (named after your project)
 
-| File | What it is |
-|------|------------|
-| `myapp.toolspec.json` | the tools (one per API operation) — re-runnable, editable |
-| `myapp.any2agent.toml`  | config: base URL, auth method, default model |
+| File | Purpose |
+|---|---|
+| `yourapp.toolspec.json` | the tools — one per API operation. Editable, re-runnable. |
+| `yourapp.any2agent.toml` | config: base URL, auth method, default model. |
 
-Re-run `connect`/`init` anytime your API changes.
+Re-run `connect`/`init` whenever your API changes.
 
 ---
 
-## Choosing a model
+## Models (pick any, key-gated)
 
-Set the key, and that model appears in the chat UI's model picker:
+A model appears in the chat picker **only when its key is set** — set one or many.
 
-| Provider | Set this env var | Override model with |
-|----------|------------------|---------------------|
-| OpenAI   | `OPENAI_API_KEY`    | `OPENAI_MODEL` |
+| Provider | Env var | Model override |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL` |
 | Anthropic (Claude) | `ANTHROPIC_API_KEY` | `CLAUDE_MODEL` |
 | Google (Gemini) | `GEMINI_API_KEY` | `GEMINI_MODEL` |
 | Moonshot (Kimi) | `MOONSHOT_API_KEY` | `KIMI_MODEL` |
 
-Copy `.env.example` → `.env` and fill in what you have. **A blank key = that
-model is simply hidden.** No key at all? Scanning and verifying still work; only
-the chat needs a model.
+Tip: `cp .env.example .env` and fill in what you have. No key at all? Scanning
+and verifying still work — only the chat needs a model.
 
 ---
 
-## Authentication & permissions (the important part)
+## Authentication & permissions
 
-`any2agent` never invents access. It carries the **logged-in user's own
-credential** to every API call (this is *passthrough*), so your backend enforces
-roles exactly as it already does:
+any2agent **never invents access.** It forwards the **logged-in user's own
+session/token** to every API call (*passthrough*), so your backend enforces roles
+exactly as it already does — the agent has no extra privileges.
 
-- The wizard inspects your code and proposes the right mode automatically
-  (cookie like `sb-*` / `JSESSIONID`, `Authorization: Bearer`, a custom header…).
-- A `403`/`401` from your API is treated as **"not allowed for this user"** —
-  correct behavior, not an error.
-- Write/delete operations **pause for one-click confirmation** before running.
+- `connect` reads your code and picks the mode automatically: a cookie
+  (`sb-*`, `JSESSIONID`, …), `Authorization: Bearer`, or a custom header.
+- A `401`/`403` from your API means *"not allowed for this user"* — treated as
+  correct, not an error.
+- Write/delete tools **pause for one-click confirmation** in the chat.
 
-You set credentials with environment variables, named in `myapp.any2agent.toml`.
+Credentials live in environment variables (named in `yourapp.any2agent.toml`).
 **Secrets never go in the repo.**
-
----
-
-## Safety
-
-- **Read vs write/destructive** is auto-classified (by HTTP method). Writes and
-  deletes require explicit confirmation in the chat.
-- During verification, only **read** endpoints are probed live; writes are never
-  auto-called.
-- Tools that can't be made to work are **quarantined**, not shipped broken — and
-  reported honestly.
 
 ---
 
 ## How it works
 
 ```
-1. scan      OpenAPI contract OR source tree  → tools + route ground-truth
-2. auth      detect login/session scheme      → passthrough plan
+1. scan      OpenAPI spec OR source tree   → tools + the true route list
+2. auth      detect the login/session scheme → passthrough plan
 3. verify    coverage · correctness · live calls · agent tool-selection
-4. repair    fill gaps (params, descriptions, missing routes); re-verify
-5. serve     chat UI + /chat API  (multi-model, confirm gate)
+4. repair    fill gaps (params, descriptions, missing routes) → re-verify
+5. serve     chat UI + /chat API  (multi-model, write/danger confirm gate)
 ```
 
-Exit criteria are explicit: it stops when **all checks pass**, or on a budget/
-no-progress limit — and then prints exactly what's still unverified.
+The loop stops when **all checks pass**, or at a budget/no-progress limit — and
+then prints exactly what's still unverified (it never silently claims success).
+
+---
+
+## FAQ / Troubleshooting
+
+**No model shows up in the picker.** No provider key is set — `export OPENAI_API_KEY=...`
+(or another) and refresh.
+
+**`connect` says base_url is empty / can't reach the API.** Edit `base_url` in
+`yourapp.any2agent.toml` to where your API actually runs, then `any2agent serve`.
+
+**Everything returns 401/403 during verify.** Your API requires a login — that's
+expected. Pass a logged-in user's session for verification:
+`any2agent connect --live --session-cookie "sb-...=..."` (or `--session-bearer`).
+In production the embedding app forwards the end-user's session automatically.
+
+**My framework isn't detected.** `connect` supports FastAPI, Flask, Express,
+NestJS, Spring, and Next.js today. If yours is missing, generate an OpenAPI spec
+and use `init`, or open an issue — new scanners are easy to add (see
+[CONTRIBUTING](CONTRIBUTING.md)).
+
+**Signed requests (HMAC/SigV4) or mTLS.** Can't be done by token passthrough;
+`connect` warns and you'll need a custom adapter.
 
 ---
 
 ## Requirements
 
 - Python 3.9+
-- One LLM provider key (for chatting and optional smart repair)
+- One LLM provider key (for the chat and optional smart repair)
 - Your target API reachable at a base URL (for live verification & runtime)
+
+## Contributing
+
+New framework scanners, auth detectors, and transport adapters are the most
+valuable contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

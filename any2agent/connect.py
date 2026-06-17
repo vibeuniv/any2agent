@@ -208,35 +208,36 @@ def _repair(toolset: ToolSet, rep: Dict[str, Any], src_index: Dict[str, str]) ->
 def connect(args) -> None:
     interactive = not getattr(args, "no_input", False)
 
-    path = _ask("? 연결할 프로젝트 경로: ", getattr(args, "path", None), ".", interactive)
+    path = _ask("? Project path to connect: ", getattr(args, "path", None), ".", interactive)
     path = os.path.abspath(path)
     if not os.path.isdir(path):
-        print("[connect] 경로 없음: %s" % path, file=sys.stderr); sys.exit(1)
+        print("[connect] path not found: %s" % path, file=sys.stderr); sys.exit(1)
 
-    project = slugify(_ask("? 프로젝트 이름: ", getattr(args, "project", None),
+    project = slugify(_ask("? Project name: ", getattr(args, "project", None),
                            os.path.basename(path.rstrip("/")), interactive))
     # autonomy: propose a base_url guessed from the project's own config/source as the default.
     guessed = _guess_base_url(path)
     if guessed and not getattr(args, "base_url", None):
-        print("[connect] base URL 후보(소스에서 추정): %s" % guessed)
-    base_url = _ask("? 라이브 API base URL (검증/실행용, 엔터=추정값): ",
+        print("[connect] guessed base URL (from source): %s" % guessed)
+    base_url = _ask("? Live API base URL (for verification/runtime, Enter=guess): ",
                     getattr(args, "base_url", None), guessed, interactive)
 
     # ---- analyze the project's auth logic -> passthrough plan ----
     auth = auth_scan.analyze(path)
-    print("\n[connect] 인증 분석: scheme=%s carrier=%s confidence=%s"
+    print("\n[connect] auth analysis: scheme=%s carrier=%s confidence=%s"
           % (auth.get("scheme"), auth.get("carrier"), auth.get("confidence")))
     if auth.get("carrier") == "cookie":
-        print("  → 사용자 세션쿠키 passthrough: %s"
-              % (auth.get("cookie_names") or auth.get("cookie_prefixes") or "전체"))
+        print("  -> passthrough the user's session cookie(s): %s"
+              % (auth.get("cookie_names") or auth.get("cookie_prefixes") or "all"))
     else:
-        print("  → 사용자 Bearer 토큰 passthrough (header=%s)" % auth.get("header", "Authorization"))
+        print("  -> passthrough the user's Bearer token (header=%s)" % auth.get("header", "Authorization"))
     if auth.get("role_source"):
-        print("  · 롤 결정: %s (백엔드가 RBAC 강제, 에이전트는 사용자 권한 그대로)" % auth["role_source"])
+        print("  - role source: %s (backend enforces RBAC; the agent keeps the user's privileges only)"
+              % auth["role_source"])
     if auth.get("evidence"):
-        print("  · 근거: %s" % ", ".join(auth["evidence"]))
+        print("  - evidence: %s" % ", ".join(auth["evidence"]))
     # allow override
-    ov = _ask("? 위 인증 설정으로 진행할까요? [Y/carrier 변경: cookie|bearer]: ",
+    ov = _ask("? Proceed with this auth? [Y / change carrier: cookie|bearer]: ",
               getattr(args, "auth", None), "y", interactive).lower()
     if ov in ("cookie", "bearer"):
         auth["carrier"] = ov
@@ -245,19 +246,19 @@ def connect(args) -> None:
     want_live = base_url and registry.llm_available()
     consent = getattr(args, "live", None)
     if consent is None:
-        ans = _ask("? 라이브 read 호출로 검증해도 될까요? (write/danger 제외) [y/N]: ", None, "n", interactive)
+        ans = _ask("? Verify with live read-only calls? (write/danger excluded) [y/N]: ", None, "n", interactive)
         consent = ans.lower().startswith("y")
     live = bool(base_url) and bool(consent)
     # `auth` is the analyzed passthrough plan (above) — used as config.auth as-is.
 
     # ---- generate ----
-    print("\n[connect] 스캔: %s" % path)
+    print("\n[connect] scanning: %s" % path)
     src_tools, src_meta = source_scan.scan(path)
     routes = src_meta["routes"]
     print("  framework=%s  routes=%d" % (src_meta["framework"], len(routes)))
     contract = openapi_scan and source_scan.find_openapi(path)
     if contract:
-        print("  계약 발견 → OpenAPI 빠른길: %s" % contract)
+        print("  OpenAPI contract found -> fast path: %s" % contract)
         oa_tools, oa_meta = openapi_scan.scan(contract)
         toolset = ToolSet(project, oa_tools, {"source": path, "contract": contract, **src_meta})
     else:
@@ -284,36 +285,36 @@ def connect(args) -> None:
     if sess_bearer:
         verify_ctx["in_headers"] = {"authorization": "Bearer " + sess_bearer}
     if live and not (sess_cookie or sess_bearer):
-        print("  · live 검증 세션 미제공 → 미인증 프로브(401/403=권한거부로 정직 분류)")
+        print("  - no verification session provided -> unauthenticated probes (401/403 = authz, reported honestly)")
 
     # ---- verify -> repair loop ----
     prev_sig = None
     final = None
     for rnd in range(1, MAX_ROUNDS + 1):
-        print("\n[connect] 검증 라운드 %d/%d  (live=%s)" % (rnd, MAX_ROUNDS, live))
+        print("\n[connect] verify round %d/%d  (live=%s)" % (rnd, MAX_ROUNDS, live))
         rep = V.run_all(toolset, routes, adapter, probes, live=live,
                         model_id=getattr(args, "default_model", None), verify_ctx=verify_ctx)
         _print_report(rep)
         final = rep
         if rep["passed"]:
-            print("[connect] ✅ 모든 검증 통과")
+            print("[connect] ✅ all checks passed")
             break
         sig = _gap_signature(rep)
         if sig == prev_sig:
-            print("[connect] ⚠ 무진행(NO-PROGRESS) — 남은 갭은 자동수정 불가, 정직 보고로 종료")
+            print("[connect] ⚠ NO-PROGRESS — remaining gaps can't be auto-fixed; stopping with an honest report")
             break
         prev_sig = sig
         try:
             from . import llm_repair as _d
             if registry.llm_available() and _d.budget_left() <= 0:
-                print("[connect] ⚠ LLM-BUDGET 소진 — 정직 보고로 종료")
+                print("[connect] ⚠ LLM-BUDGET exhausted — stopping with an honest report")
                 break
         except Exception:
             pass
         n = _repair(toolset, rep, src_index)
-        print("  repair: %d 변경" % n)
+        print("  repair: %d change(s)" % n)
         if n == 0:
-            print("[connect] ⚠ 자동수정 없음 — 정직 보고로 종료")
+            print("[connect] ⚠ nothing left to auto-fix — stopping with an honest report")
             break
 
     # ---- write artifacts (project-named) ----
@@ -323,22 +324,22 @@ def connect(args) -> None:
     toolset.save(ts_path)
     cfg.save(cfg_path)
     c = toolset.counts()
-    print("\n[connect] 산출물: %s (tools=%d write=%d danger=%d), %s"
+    print("\n[connect] wrote: %s (tools=%d write=%d danger=%d), %s"
           % (ts_path, c["tools"], c["write"], c["danger"], cfg_path))
     _residual(final)
 
     # ---- chat target ----
-    where = _ask("\n? 챗을 어디에? [1=단독서버 / 2=임베드 스니펫 / 0=나중에]: ",
+    where = _ask("\n? Where should the chat live? [1=standalone server / 2=embed snippet / 0=later]: ",
                  getattr(args, "chat", None), "0", interactive)
     if where == "1":
         from .server.app import serve
         ts = ToolSet.load(ts_path)
-        print("[connect] serve → http://%s:%d" % (cfg.host, cfg.port))
+        print("[connect] serving → http://%s:%d" % (cfg.host, cfg.port))
         serve(cfg, ts)
     elif where == "2":
         _print_embed(cfg)
     else:
-        print("[connect] 나중에:  any2agent serve --project %s" % project)
+        print("[connect] later:  any2agent serve --project %s" % project)
 
 
 def _gap_signature(rep: Dict[str, Any]) -> str:
@@ -359,22 +360,22 @@ def _gap_signature(rep: Dict[str, Any]) -> str:
 def _residual(rep: Optional[Dict[str, Any]]):
     if not rep or rep.get("passed"):
         return
-    print("[connect] 잔여 갭(정직 보고):")
+    print("[connect] residual gaps (honest report):")
     for r in rep["reports"]:
         if r.get("passed") is False:
             if r["name"] == "coverage" and r["missing"]:
-                print("  · 미커버 라우트 %d개: %s" % (len(r["missing"]),
+                print("  - %d uncovered route(s): %s" % (len(r["missing"]),
                       ", ".join(m["method"] + " " + m["path"] for m in r["missing"][:8])))
             elif r["name"] == "liveness" and r["failed"]:
-                print("  · live 실패 %d개(경로/인증 확인 필요): %s" % (len(r["failed"]),
+                print("  - %d live failure(s) (check path/auth): %s" % (len(r["failed"]),
                       ", ".join(f["name"] for f in r["failed"][:8])))
             elif r["name"] == "accuracy" and r["bad"]:
-                print("  · 구조오류 %d개" % len(r["bad"]))
+                print("  - %d structural error(s)" % len(r["bad"]))
             elif r["name"] == "agent_e2e":
-                print("  · 선택 실패 프로브: %d" % sum(1 for c in r.get("cases", []) if not c.get("ok")))
+                print("  - probes that selected no valid tool: %d" % sum(1 for c in r.get("cases", []) if not c.get("ok")))
 
 
 def _print_embed(cfg: AgentConfig):
-    print("\n[connect] 임베드 스니펫 — 호스트 페이지에 추가:")
+    print("\n[connect] embed snippet — add to your host page:")
     print('  <iframe src="http://%s:%d/" style="width:380px;height:560px;border:0"></iframe>' % (cfg.host, cfg.port))
-    print("  (먼저 `any2agent serve --project %s` 로 띄우세요)" % cfg.project)
+    print("  (first run `any2agent serve --project %s`)" % cfg.project)

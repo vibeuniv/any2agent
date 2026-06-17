@@ -20,7 +20,7 @@ def execute(spec: ToolSpec, args: Dict[str, Any], adapter: Adapter,
             "tool": spec.name,
             "danger": bool(spec.danger),
             "args": args,
-            "message": ("⚠️ 위험·비가역 작업" if spec.danger else "⚠️ 변경 작업")
-                       + " — 실행하려면 확인이 필요합니다.",
+            "message": ("⚠️ Destructive / irreversible action" if spec.danger else "⚠️ Write action")
+                       + " — confirmation required before running.",
         }
     return adapter.call(spec, args or {}, ctx)

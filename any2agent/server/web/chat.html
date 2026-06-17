@@ -36,12 +36,12 @@
 <body>
 <header>
   <span class="nm">{{PROJECT}}</span>
-  <span class="chip" id="modelChip" title="모델 변경">model ▾</span>
+  <span class="chip" id="modelChip" title="Change model">model ▾</span>
   <div class="menu" id="modelMenu"></div>
 </header>
 <div class="wrap" id="col"></div>
 <footer><div class="row">
-  <textarea id="inp" placeholder="메시지를 입력하세요…"></textarea>
+  <textarea id="inp" placeholder="Type a message…"></textarea>
   <button class="send" id="send">➤</button>
 </div></footer>
 <script>
@@ -73,7 +73,7 @@ function chipLabel(){
 }
 function renderMenu(){
   menu.innerHTML='';
-  if(!MODELS.length){menu.innerHTML='<div class="mi">사용 가능한 모델 없음 (provider 키 설정 필요)</div>';return;}
+  if(!MODELS.length){menu.innerHTML='<div class="mi">No models available (set a provider key)</div>';return;}
   MODELS.forEach(function(m){
     var d=document.createElement('div'); d.className='mi'+(m.id===(selectedModelId||DEFAULT_ID)?' sel':'');
     d.textContent=(m.id===(selectedModelId||DEFAULT_ID)?'✓ ':'  ')+m.label+'  ('+m.model+')';
@@ -118,16 +118,16 @@ function send(){
 }
 function renderConfirm(ev){
   var d=document.createElement('div');d.className='turn';
-  d.innerHTML='<div class="confirm">'+esc(ev.message||('확인: '+ev.name))+'<br><br>'
-    +'<button class="yes">실행</button><button class="no">취소</button></div>';
+  d.innerHTML='<div class="confirm">'+esc(ev.message||('Confirm: '+ev.name))+'<br><br>'
+    +'<button class="yes">Run</button><button class="no">Cancel</button></div>';
   col.appendChild(d);scroll();
   d.querySelector('.yes').onclick=function(){
     fetch('confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:ev.name,args:ev.args})})
     .then(function(r){return r.json();}).then(function(res){
-      d.querySelector('.confirm').innerHTML='✅ 실행됨: '+esc(JSON.stringify(res).slice(0,400));
+      d.querySelector('.confirm').innerHTML='✅ Done: '+esc(JSON.stringify(res).slice(0,400));
     });
   };
-  d.querySelector('.no').onclick=function(){d.querySelector('.confirm').innerHTML='취소됨.';};
+  d.querySelector('.no').onclick=function(){d.querySelector('.confirm').innerHTML='Cancelled.';};
 }
 document.getElementById('send').onclick=send;
 inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});

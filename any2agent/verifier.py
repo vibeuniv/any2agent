@@ -91,7 +91,7 @@ def liveness(toolset: ToolSet, adapter: Adapter, sample: int = 8,
             "ran": len(ran), "ok": sum(1 for r in results if r["status"] == "ok"),
             "authz": len(authz), "failed": failed, "results": results,
             "note": ("no read tool was probable" if not ran else
-                     ("%d개가 권한범위 밖(401/403) — 사용자 롤 정상 동작" % len(authz)) if authz else "")}
+                     ("%d outside this user's role scope (401/403) — correct behavior" % len(authz)) if authz else "")}
 
 
 def agent_e2e(toolset: ToolSet, probes: List[str], model_id: Optional[str] = None,
