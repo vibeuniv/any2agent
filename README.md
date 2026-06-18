@@ -169,11 +169,18 @@ answers", "my team is payments") and recall them in later turns **and future
 sessions**. Relevant notes are surfaced to the model automatically each turn; it
 can also `remember`/`forget` on its own.
 
+**Learns from feedback.** Every answer has a 👍 / 👎. A 👎 lets the user say what
+they actually wanted — that correction is remembered and applied next time. (This
+is the only "self-learning" that's safe by design: see the invariant below.)
+
 - **Per-user isolation.** Each user's notes live in their own file — there is no
   cross-user read path, so memory can never leak between users.
 - **No extra key.** Recall is keyword-based (no embeddings), so memory works with
   any provider — or none.
 - **Secrets are refused** on write (passwords/tokens/keys are never stored).
+- **Data, never policy.** Memory only ever flows to the model as informational
+  context — nothing in the confirm/auth path reads it, so a note can't loosen the
+  write-confirm gate or RBAC. Text that reads like a permission change is refused.
 
 Scope it per user by pointing `memory_owner_header` in `yourapp.any2agent.toml`
 at a header your app sets to a stable user id (e.g. `X-User-Id`); the embedding

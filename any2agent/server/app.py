@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from ..config import AgentConfig
 from ..spec import ToolSet
 from ..adapters.rest import RestAdapter
-from ..core import registry, agent
+from ..core import registry, agent, memory
 
 
 # Defined at module level (FastAPI resolves body models by type hints; closure-local
@@ -34,6 +34,11 @@ class ConfirmBody(BaseModel):
     name: str
     args: Dict[str, Any] = {}
     model_id: Optional[str] = None
+
+
+class FeedbackBody(BaseModel):
+    rating: str = ""                 # "up" | "down"
+    correction: str = ""             # on 👎: what the user actually wanted (stored as a note)
 
 
 def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
@@ -86,6 +91,17 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
     @app.post("/confirm")
     def confirm(body: ConfirmBody, request: Request):
         res = agent.confirm_and_run(body.name, body.args, toolset, adapter, ctx=_req_ctx(request))
+        return JSONResponse(res)
+
+    @app.post("/feedback")
+    def feedback(body: FeedbackBody, request: Request):
+        # Tier-1 self-learning: an explicit 👎 + correction becomes a durable,
+        # owner-scoped preference note (data, never policy — see core.memory).
+        rctx = _req_ctx(request)
+        if not rctx.get("memory_enabled"):
+            return JSONResponse({"ok": False, "reason": "memory_disabled"})
+        res = memory.capture_feedback(rctx.get("state_dir", ""), rctx.get("owner", "anon"),
+                                      body.rating, body.correction)
         return JSONResponse(res)
 
     @app.get("/", response_class=HTMLResponse)

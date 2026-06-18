@@ -10,6 +10,13 @@ Design (RBAC-safe, no embedding key needed):
   - Recall is keyword overlap scoring (no embeddings → no extra provider key).
   - Secrets are refused on write; per-owner record cap prevents unbounded growth.
 
+Safety invariant — memory is DATA, never POLICY:
+  Notes only ever flow into the model as informational system text. NOTHING in the
+  dispatch / confirmation / auth path reads memory, so a poisoned note can never
+  bypass the write-confirm gate or the target's RBAC (those are enforced in code,
+  independent of what's stored). As defense-in-depth we also refuse to store text
+  that reads like an authorization/safety-bypass instruction (is_policy).
+
 Stored as JSON under .any2agent-state/<project>/memory/<owner-hash>.json.
 """
 from __future__ import annotations
@@ -21,6 +28,15 @@ import re
 from typing import Dict, List
 
 _SECRET = re.compile(r"(password|passwd|secret|token|api[_-]?key|bearer|otp|credential|private[_-]?key)", re.I)
+# Authorization / safety-bypass phrasing — refused as defense-in-depth so such text
+# can never be persisted into the injected system context (the real guarantee is the
+# architectural invariant: memory is never read by the gate/auth path).
+_POLICY = re.compile(
+    r"\b(bypass|skip\s+(the\s+)?confirm|without\s+(asking|confirm)|"
+    r"auto[-\s]?(approve|confirm|delete|run)|always\s+(approve|confirm|allow|delete|run)|"
+    r"disable\s+(the\s+)?(gate|confirmation|safety|check)|"
+    r"ignore\s+(the\s+)?(rule|instruction|permission|safety|warning)|"
+    r"grant\s+(me\s+)?(admin|root|privilege)|elevate\s+privilege|\bsudo\b)", re.I)
 _WORD = re.compile(r"[a-z0-9]+")
 _MAX_RECORDS = 200          # per-owner cap (drops oldest)
 _MAX_LEN = 500              # per-note char cap
@@ -53,14 +69,21 @@ def is_secret(text: str) -> bool:
     return bool(_SECRET.search(text or ""))
 
 
+def is_policy(text: str) -> bool:
+    """True if text reads like an authorization/safety-bypass instruction."""
+    return bool(_POLICY.search(text or ""))
+
+
 def remember(state_dir: str, owner: str, text: str) -> Dict:
-    """Save one durable fact for this owner. Refuses empty/secret text, dedups,
-    and caps the store (oldest dropped)."""
+    """Save one durable fact for this owner. Refuses empty/secret/policy text,
+    dedups, and caps the store (oldest dropped)."""
     text = (text or "").strip()[:_MAX_LEN]
     if not text:
         return {"ok": False, "reason": "empty"}
     if is_secret(text):
         return {"ok": False, "reason": "looks_secret"}
+    if is_policy(text):
+        return {"ok": False, "reason": "looks_like_policy"}
     path = _owner_file(state_dir, owner)
     recs = _load(path)
     if text in recs:
@@ -104,6 +127,26 @@ def recall(state_dir: str, owner: str, query: str = "", top_k: int = 6) -> List[
             scored.append((score, r))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in scored[:top_k]]
+
+
+def capture_feedback(state_dir: str, owner: str, rating: str = "",
+                     correction: str = "") -> Dict:
+    """Tier-1 self-learning: turn an explicit 👍/👎 + correction into a durable note.
+    Positive feedback (or 👎 with no correction text) stores nothing — there is no
+    preference to learn. A correction is stored verbatim as the user's own stated
+    preference, subject to the same secret/policy guards as remember()."""
+    rating = (rating or "").lower().strip()
+    correction = (correction or "").strip()
+    if rating in ("up", "good", "positive", "+1", "1", "true"):
+        return {"ok": True, "remembered": None}
+    if not correction:
+        return {"ok": True, "remembered": None, "reason": "no_correction"}
+    res = remember(state_dir, owner, correction)
+    if not res.get("ok"):
+        return {"ok": False, "remembered": None, "reason": res.get("reason")}
+    if res.get("note") == "already_known":
+        return {"ok": True, "remembered": None, "reason": "already_known"}
+    return {"ok": True, "remembered": correction, "count": res.get("count")}
 
 
 # ---- built-in agent tools (declarative defs; the LLM calls these by name) ----

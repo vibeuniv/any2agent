@@ -71,6 +71,19 @@
   .confirm .yes{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
   .confirm .yes:hover{background:var(--accent-d)}
 
+  /* feedback bar (Tier-1 self-learning) */
+  .fb{margin:4px 0 2px 40px;display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .2s}
+  .turn.bot:hover .fb,.fb.open,.fb.done{opacity:1}
+  .fb button{border:1px solid var(--line);background:var(--card);color:var(--mut);border-radius:8px;
+             cursor:pointer;font-size:13px;line-height:1;padding:4px 8px}
+  .fb button:hover{color:var(--ink);border-color:var(--accent)}
+  .fb .ok{color:var(--mut);font-size:12.5px}
+  .fb-edit{margin:6px 0 4px 40px;display:flex;gap:6px}
+  .fb-edit input{flex:1;min-width:0;font:inherit;font-size:13.5px;padding:7px 11px;border-radius:9px;
+                 border:1px solid var(--line);background:var(--card);color:var(--ink)}
+  .fb-edit button{padding:7px 13px;border-radius:9px;border:1px solid var(--accent);background:var(--accent);
+                  color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+
   /* empty state */
   .hero{max-width:780px;margin:0 auto;padding:9vh 20px 0;text-align:center}
   .hero .ico{width:56px;height:56px;border-radius:16px;margin:0 auto 18px;
@@ -190,7 +203,7 @@ function send(text){
   .then(function(resp){
     var reader=resp.body.getReader(), dec=new TextDecoder(), buf='';
     function pump(){return reader.read().then(function(res){
-      if(res.done){ if(acc)convo.push({role:'assistant',content:acc}); turn.querySelector('.spark').classList.remove('spin'); setBusy(false); return; }
+      if(res.done){ if(acc){convo.push({role:'assistant',content:acc}); addFeedback(turn);} turn.querySelector('.spark').classList.remove('spin'); setBusy(false); return; }
       buf+=dec.decode(res.value,{stream:true});
       var parts=buf.split('\n\n'); buf=parts.pop();
       parts.forEach(function(p){
@@ -205,6 +218,40 @@ function send(text){
     });}
     return pump();
   }).catch(function(){turn.querySelector('.spark').classList.remove('spin');body.innerHTML='<div style="color:var(--warn)">Connection error.</div>';setBusy(false);});
+}
+function postFeedback(rating,correction){
+  return fetch('feedback',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({rating:rating,correction:correction||''})}).then(function(r){return r.json();});
+}
+function addFeedback(turn){
+  var bar=document.createElement('div'); bar.className='fb';
+  bar.innerHTML='<button class="up" title="Good answer">👍</button>'
+              +'<button class="down" title="Needs correction — teach the agent">👎</button>';
+  turn.parentNode.insertBefore(bar,turn.nextSibling);
+  bar.querySelector('.up').onclick=function(){
+    postFeedback('up'); bar.classList.add('done'); bar.innerHTML='<span class="ok">Thanks 👍</span>';
+  };
+  bar.querySelector('.down').onclick=function(){
+    bar.classList.add('open');
+    var ed=document.createElement('div'); ed.className='fb-edit';
+    ed.innerHTML='<input placeholder="What should it have done? (remembered for next time)">'
+                +'<button>Save</button>';
+    bar.parentNode.insertBefore(ed,bar.nextSibling);
+    var box=ed.querySelector('input'); box.focus();
+    function save(){
+      var v=box.value.trim(); if(!v)return;
+      ed.remove();
+      postFeedback('down',v).then(function(res){
+        bar.classList.add('done');
+        bar.innerHTML='<span class="ok">'+(res&&res.remembered?'Remembered ✓ — I\'ll apply this next time'
+                      : (res&&res.reason==='looks_like_policy'?'Can\'t store that (looks like a permission change)'
+                      : 'Thanks — noted'))+'</span>';
+      });
+    }
+    ed.querySelector('button').onclick=save;
+    box.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();save();}});
+  };
+  scrollDown();
 }
 function renderConfirm(ev,after){
   var d=document.createElement('div');d.className='confirm';
