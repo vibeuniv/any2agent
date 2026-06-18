@@ -47,8 +47,8 @@ there. any2agent goes further:
 ## Install
 
 ```bash
-pip install any2agent
-# or the latest:  pip install git+https://github.com/vibeuniv/any2agent
+pip install git+https://github.com/vibeuniv/any2agent
+# (PyPI release — `pip install any2agent` — coming soon)
 ```
 
 ---
