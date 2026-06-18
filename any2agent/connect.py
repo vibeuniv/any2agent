@@ -277,8 +277,8 @@ def connect(args) -> None:
 
     # verification session (user's own) for live RBAC probing — passthrough into ctx.
     # Supplied via flags or env; used ONLY for verification, never stored.
-    sess_cookie = getattr(args, "session_cookie", None) or os.getenv("AIAGENT_VERIFY_COOKIE", "")
-    sess_bearer = getattr(args, "session_bearer", None) or os.getenv("AIAGENT_VERIFY_BEARER", "")
+    sess_cookie = getattr(args, "session_cookie", None) or os.getenv("ANY2AGENT_VERIFY_COOKIE", "")
+    sess_bearer = getattr(args, "session_bearer", None) or os.getenv("ANY2AGENT_VERIFY_BEARER", "")
     verify_ctx: Dict[str, Any] = {}
     if sess_cookie:
         verify_ctx["cookie"] = sess_cookie

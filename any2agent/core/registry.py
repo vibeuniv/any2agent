@@ -92,11 +92,14 @@ def available_models() -> List[Dict[str, str]]:
 
 
 def default_model_id(prefer: str = "") -> Optional[str]:
+    """Pick the default model id. Precedence: explicit config (`prefer`) →
+    DEFAULT_MODEL_ID env → gpt → first available."""
     avail = [m["id"] for m in available_models()]
     if not avail:
         return None
-    if prefer and prefer in avail:
-        return prefer
+    for cand in (prefer, os.getenv("DEFAULT_MODEL_ID", "")):
+        if cand and cand in avail:
+            return cand
     if "gpt" in avail:
         return "gpt"
     return avail[0]
