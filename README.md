@@ -162,6 +162,26 @@ Credentials live in environment variables (named in `yourapp.any2agent.toml`).
 
 ---
 
+## Memory (remembers facts across sessions)
+
+The agent can save small, durable facts a user tells it ("default to short
+answers", "my team is payments") and recall them in later turns **and future
+sessions**. Relevant notes are surfaced to the model automatically each turn; it
+can also `remember`/`forget` on its own.
+
+- **Per-user isolation.** Each user's notes live in their own file — there is no
+  cross-user read path, so memory can never leak between users.
+- **No extra key.** Recall is keyword-based (no embeddings), so memory works with
+  any provider — or none.
+- **Secrets are refused** on write (passwords/tokens/keys are never stored).
+
+Scope it per user by pointing `memory_owner_header` in `yourapp.any2agent.toml`
+at a header your app sets to a stable user id (e.g. `X-User-Id`); the embedding
+app forwards it like the session. Without it, notes share one local bucket — fine
+for single-user/local. Set `memory_enabled = false` to turn it off.
+
+---
+
 ## How it works
 
 ```

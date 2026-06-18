@@ -53,6 +53,13 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
         xs = request.headers.get("x-agent-session")
         if xs:
             c["cookie"] = (c.get("cookie", "") + "; " + xs).strip("; ")
+        # memory owner: a stable per-user id the embedding app forwards. Without a
+        # configured header, memory is a single shared "anon" bucket (local/single-user).
+        c["memory_enabled"] = cfg.memory_enabled
+        owner = ""
+        if cfg.memory_owner_header:
+            owner = request.headers.get(cfg.memory_owner_header.lower(), "")
+        c["owner"] = owner or "anon"
         return c
 
     @app.get("/info")

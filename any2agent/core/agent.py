@@ -11,16 +11,37 @@ import json
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..spec import ToolSet
-from . import registry, toolrag, dispatch
+from . import registry, toolrag, dispatch, memory
 from ..adapters.base import Adapter
 
 MAX_STEPS = 8
 
 
-def _tools_payload(seed):
+def _tools_payload(seed, mem_on: bool = False):
     out = [t.to_function() for t in seed]
     out.append(toolrag.SEARCH_TOOLS_DEF)
+    if mem_on:
+        out.extend(memory.MEMORY_TOOLS_DEF)
     return out
+
+
+def _inject_memory(msgs, state_dir: str, owner: str):
+    """Prepend a system note with the user's relevant remembered facts (scored by
+    the latest user message). No-op when nothing is remembered."""
+    last_user = ""
+    for m in reversed(msgs):
+        if m.get("role") == "user":
+            c = m.get("content")
+            last_user = c if isinstance(c, str) else ""
+            break
+    # keyword-ranked when the message shares words with a note; else recent profile
+    notes = memory.recall(state_dir, owner, last_user) or memory.recall(state_dir, owner, "")
+    if not notes:
+        return msgs
+    blob = ("Facts you previously remembered about this user (use if relevant; "
+            "they may be outdated, and you can update them with the memory tools):\n"
+            + "\n".join("- " + n for n in notes))
+    return [{"role": "system", "content": blob}] + msgs
 
 
 def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
@@ -41,9 +62,16 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
     msgs = list(messages)
     extra = registry.completion_kwargs(entry)
 
+    # memory: owner-scoped recall + remember/forget tools (when enabled & state dir known)
+    state_dir = ctx.get("state_dir") or ""
+    owner = ctx.get("owner") or "anon"
+    mem_on = bool(ctx.get("memory_enabled")) and bool(state_dir)
+    if mem_on:
+        msgs = _inject_memory(msgs, state_dir, owner)
+
     for _ in range(MAX_STEPS):
         seed = toolrag.build_seed(all_tools, discovered)
-        tools_payload = _tools_payload(seed)
+        tools_payload = _tools_payload(seed, mem_on)
         try:
             stream = registry.completion(model_string, msgs, tools=tools_payload, stream=True, extra=extra)
         except Exception as e:
@@ -103,6 +131,13 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                 yield {"type": "tool", "name": name, "args": args, "result": result}
                 msgs.append(_tool_msg(i, name, result))
                 continue
+
+            if mem_on:
+                handled, mres = memory.handle(name, args, state_dir, owner)
+                if handled:
+                    yield {"type": "tool", "name": name, "args": args, "result": mres}
+                    msgs.append(_tool_msg(i, name, mres))
+                    continue
 
             spec = by_name.get(name)
             if not spec:

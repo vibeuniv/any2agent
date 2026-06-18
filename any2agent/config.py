@@ -36,6 +36,11 @@ class AgentConfig:
     default_model_id: str = ""        # picker default: gpt|kimi|claude|gemini (empty = first available)
     host: str = "127.0.0.1"
     port: int = 8800
+    # memory: the agent can remember small facts per user across sessions.
+    memory_enabled: bool = True
+    # header carrying a STABLE per-user id (set by the embedding app) used to scope
+    # memory. Empty = single shared "anon" bucket (ok for local/single-user only).
+    memory_owner_header: str = ""
 
     # ---- project-name templated artifact paths ----
     def toolspec_path(self) -> str:
@@ -66,6 +71,8 @@ class AgentConfig:
             default_model_id=d.get("default_model_id", ""),
             host=d.get("host", "127.0.0.1"),
             port=int(d.get("port", 8800)),
+            memory_enabled=bool(d.get("memory_enabled", True)),
+            memory_owner_header=d.get("memory_owner_header", ""),
         )
 
     def _to_toml(self) -> str:
@@ -78,6 +85,8 @@ class AgentConfig:
             f"default_model_id = {s(self.default_model_id)}",
             f"host = {s(self.host)}",
             f"port = {self.port}",
+            f"memory_enabled = {'true' if self.memory_enabled else 'false'}",
+            f"memory_owner_header = {s(self.memory_owner_header)}",
             "",
             "[auth]",
         ]
