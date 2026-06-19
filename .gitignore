@@ -25,3 +25,4 @@ dist/
 .venv/
 venv/
 env/
+LAUNCH.md
