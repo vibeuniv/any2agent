@@ -16,6 +16,8 @@ your project ──▶  any2agent connect  ──▶  a chat agent that calls yo
                   scan → verify → repair (loops until it actually works)
 ```
 
+![any2agent connect — detect auth, scan every route, verify the tool set](docs/demo.gif)
+
 ### The agent it serves
 
 <img src="docs/chat-ui.png" alt="any2agent chat UI" width="100%">
@@ -23,10 +25,8 @@ your project ──▶  any2agent connect  ──▶  a chat agent that calls yo
 A clean, multi-model chat over **your** API — read tools run instantly, write/delete
 actions pause for confirmation, and every call carries the logged-in user's session.
 
-<!-- After rendering: ![demo](docs/demo.gif)  —  `brew install vhs && vhs demo.tape` -->
-> 🎥 Terminal demo (`connect` → auto-detected auth → verify): run `vhs demo.tape`
-> (see [`demo.tape`](demo.tape)). Try it yourself on the included
-> [`examples/notes-api`](examples/notes-api).
+> 🎥 The clip above is a real `connect` run on the included
+> [`examples/notes-api`](examples/notes-api) — re-render it any time with `vhs demo.tape`.
 
 ---
 
