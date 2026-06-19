@@ -242,3 +242,7 @@ valuable contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [Apache-2.0](LICENSE). Ships with **no** vendor data or proprietary tool
 catalogs — bring your own API.
+
+The **code** is Apache-2.0 — use it, fork it, build on it freely. The **name and
+logo** "any2agent" are the project's marks: please don't use them to brand a
+fork or a hosted service in a way that implies it's official or endorsed.
