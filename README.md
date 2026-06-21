@@ -48,7 +48,6 @@ there. any2agent goes further:
 
 ```bash
 pip install git+https://github.com/vibeuniv/any2agent
-# (PyPI release — `pip install any2agent` — coming soon)
 ```
 
 ---
