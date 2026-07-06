@@ -16,6 +16,7 @@ state checks all keep seeing the raw data.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .spec import ToolSpec, ToolSet
@@ -82,6 +83,9 @@ def _sibling_reader(spec: Optional[ToolSpec], toolset: Optional[ToolSet]) -> str
 def explain(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
             toolset: Optional[ToolSet] = None) -> str:
     """One deterministic, actionable sentence for a failed call."""
+    # composite failures carry the signal in `error` (+failed_tool), not status
+    if result.get("composite"):
+        return _explain_composite(result, toolset)
     status = result.get("status")
     if status in (400, 422):
         detail = ""
@@ -114,6 +118,30 @@ def explain(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
     return ""
 
 
+def _explain_composite(result: Dict[str, Any], toolset: Optional[ToolSet]) -> str:
+    """Composite-internal failures: name the failing step, and when it was an
+    HTTP error reuse the status table with the FAILING tool's spec so hints
+    (incl. the 404 sibling suggestion) still apply."""
+    err = str(result.get("error") or "")
+    tool = result.get("failed_tool") or "?"
+    step = result.get("failed_step")
+    where = "step %s (%s)" % (step, tool) if step is not None else tool
+    if err.startswith("binding_error"):
+        return ("Composite %s: an input binding could not be resolved from earlier "
+                "results — likely an empty list or a missing field. Try the steps "
+                "individually, or narrow the request." % where)
+    if err.startswith("unknown_tool"):
+        return "Composite %s references a tool that no longer exists — re-run compose." % where
+    if "nested composites" in err or "requires a toolset" in err:
+        return "Composite configuration error at %s — report this; do not retry." % where
+    m = re.match(r"^http_(\d{3})$", err)
+    if m:
+        failing = (toolset.by_name().get(tool) if toolset else None)
+        inner = explain({"ok": False, "status": int(m.group(1))}, failing, toolset)
+        return ("Composite %s failed: %s" % (where, inner)) if inner else ""
+    return ""
+
+
 # ── the LLM message ──────────────────────────────────────────────────────────
 
 def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
@@ -129,9 +157,14 @@ def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
         hint = explain(out, spec, toolset)
         if hint:
             out["hint"] = hint
-        # error bodies can be huge too — bound them the same way
+        # error bodies can be huge too — bound them the same way (incl. a
+        # composite's failing-step diagnostic data)
         if "data" in out:
             out["data"], _, _ = shape(out["data"], mode="concise")
+        if isinstance(out.get("steps"), list):
+            out["steps"] = [
+                dict(s, data=shape(s["data"], mode="concise")[0]) if isinstance(s, dict) and "data" in s else s
+                for s in out["steps"]]
         return _fit(out, cap)
 
     limit = _MODES[mode]
@@ -159,14 +192,22 @@ def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
             candidate["data"] = {"_meta": {"omitted": True,
                                            "hint": "result too large to show — use filters/limit "
                                                    "or request specific items"}}
-            return json.dumps(candidate, ensure_ascii=False, default=str)
+            return _fit(candidate, cap)  # final guard: bulk may live outside data (e.g. steps)
         limit = max(1, limit // 2)
 
 
 def _fit(obj: Dict[str, Any], cap: int) -> str:
+    """Last-resort cap enforcement — progressively drop the heavy parts while
+    staying valid JSON: first any step data, then the data body itself."""
     txt = json.dumps(obj, ensure_ascii=False, default=str)
     if len(txt) <= cap:
         return txt
     slim = dict(obj)
-    slim["data"] = {"_meta": {"omitted": True, "hint": "error body too large to show"}}
+    if isinstance(slim.get("steps"), list):
+        slim["steps"] = [{k: v for k, v in s.items() if k != "data"} if isinstance(s, dict) else s
+                         for s in slim["steps"]]
+        txt = json.dumps(slim, ensure_ascii=False, default=str)
+        if len(txt) <= cap:
+            return txt
+    slim["data"] = {"_meta": {"omitted": True, "hint": "body too large to show"}}
     return json.dumps(slim, ensure_ascii=False, default=str)

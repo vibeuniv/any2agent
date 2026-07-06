@@ -255,6 +255,13 @@ for single-user/local. Set `memory_enabled = false` to turn it off.
 Changed the tool set? `any2agent eval --compare old.toolspec.json` A/Bs both
 against the same tasks and tells you which one to keep.
 
+Beyond single endpoints: `any2agent compose` proposes **composite tools**
+(list→get chains as one call, with deterministic value binding and honest
+partial-failure reporting) — every candidate requires your interactive
+approval. And every tool result reaches the model as **shaped, always-valid
+JSON**: lists truncate item-by-item with a "use filters/limit" nudge, errors
+carry an actionable hint (a 404 suggests the sibling `*_list` tool).
+
 The loop stops when **all checks pass**, or at a budget/no-progress limit — and
 then prints exactly what's still unverified (it never silently claims success).
 

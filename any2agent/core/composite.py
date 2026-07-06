@@ -161,7 +161,8 @@ def validate(spec: ToolSpec, by_name: Dict[str, ToolSpec]) -> Tuple[bool, str]:
 
 def _report(spec: ToolSpec, records: List[Dict[str, Any]], total: int,
             failed_step: Optional[int] = None, failed_tool: str = "",
-            error: Optional[str] = None) -> Dict[str, Any]:
+            error: Optional[str] = None,
+            final_data: Any = None) -> Dict[str, Any]:
     completed = sum(1 for r in records if r["ok"])
     out: Dict[str, Any] = {
         "ok": error is None,
@@ -172,8 +173,8 @@ def _report(spec: ToolSpec, records: List[Dict[str, Any]], total: int,
         "error": error,
     }
     if error is None:
-        last = records[-1] if records else {}
-        out["data"] = last.get("data")
+        # the composite's result is the LAST step's data (records stay slim)
+        out["data"] = final_data
         return out
     # partial failure: be explicit that this is not a transaction
     out["failed_step"] = failed_step
@@ -214,12 +215,20 @@ def run(spec: ToolSpec, input_args: Dict[str, Any], adapter,
 
         res = adapter.call(target, call_args if isinstance(call_args, dict) else {}, ctx)
         ok = bool(res.get("ok"))
-        records.append({"tool": target.name, "args": call_args, "ok": ok,
-                        "status": res.get("status"), "write": bool(target.write),
-                        "data": res.get("data"), "error": res.get("error")})
+        # step records deliberately omit successful intermediate `data` — that is
+        # the whole point of a composite (execute server-side, return only the
+        # final result; §4.2). Binding reads from `results`, not records. The
+        # FAILING step keeps its data for diagnostics.
+        rec = {"tool": target.name, "args": call_args, "ok": ok,
+               "status": res.get("status"), "write": bool(target.write),
+               "error": res.get("error")}
+        if not ok:
+            rec["data"] = res.get("data")
+        records.append(rec)
         results.append(res)
         if not ok:
             why = res.get("error") or ("http_%s" % res.get("status") if res.get("status") else "step_failed")
             return _report(spec, records, total, i, target.name, str(why))
 
-    return _report(spec, records, total)
+    return _report(spec, records, total,
+                   final_data=(results[-1].get("data") if results else None))

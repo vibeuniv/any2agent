@@ -112,6 +112,31 @@ tells you if you're getting better.
 
 ---
 
+## 3.5 Composite tools — `any2agent compose`
+
+Chain frequent multi-step flows (list → get, find → update) into ONE tool the
+agent can call, per the guide's "consolidate functionality" principle:
+
+```bash
+any2agent compose --project yourapp            # propose → review → approve each
+any2agent compose --project yourapp --dry-run  # look, don't touch
+```
+
+- Candidates come from an LLM (or a deterministic list→detail fallback without
+  a key) plus your eval history's frequent tool chains.
+- **Every candidate needs your interactive approval — there is no `--yes`.**
+  Danger tools can never be composed.
+- Steps bind intermediate values deterministically
+  (`"note_id": "$steps[0].data[0].id"`); a composite containing any write step
+  still hits the confirm gate as a whole.
+- Partial failures are honest: which steps ran, which failed,
+  `rolled_back: false` — a composite is not a transaction.
+- On adoption it backs up `yourapp.toolspec.precompose.json` and prints the
+  exact `eval --compare` command — run it to prove the composite helps.
+
+Large results? Collection reads also accept `response_format`
+(`concise`/`detailed`) — the agent picks it per call; it never reaches your API.
+
 ## 4. Serve the agent
 
 ```bash

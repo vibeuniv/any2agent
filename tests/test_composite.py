@@ -337,3 +337,53 @@ def test_run_compose_adopts_and_backs_up(tmp_path, monkeypatch, leaves):
     assert (tmp_path / "notes-api.toolspec.precompose.json").exists()
     reloaded = ToolSet.load(cfg.toolspec_path())
     assert "notes_get_first" in {t.name for t in reloaded.tools}
+
+
+def test_validate_rejects_nested_composite_directly(leaves):
+    from any2agent.spec import ToolSpec
+    inner = ToolSpec(name="inner_combo", description="",
+                     backing={"composite": [{"tool": "notes_list"}, {"tool": "notes_get"}]})
+    by_name = {**{t.name: t for t in leaves.tools}, "inner_combo": inner}
+    outer = ToolSpec(name="outer", description="",
+                     backing={"composite": [{"tool": "notes_list"}, {"tool": "inner_combo"}]})
+    ok, why = C.validate(outer, by_name)
+    assert not ok and "nests composite" in why
+
+
+def test_success_steps_omit_intermediate_data(leaves):
+    rec = Recorder({"notes_list": {"ok": True, "status": 200, "data": [{"id": 1}] * 500},
+                    "notes_get": {"ok": True, "status": 200, "data": {"id": 1}}})
+    spec = _composite("combo_a", [{"tool": "notes_list", "args": {}},
+                       {"tool": "notes_get", "args": {"note_id": "$steps[0].data[0].id"}}])
+    res = C.run(spec, {}, rec, by_name={t.name: t for t in leaves.tools})
+    assert res["ok"] and res["data"] == {"id": 1}
+    assert all("data" not in s for s in res["steps"]), \
+        "intermediate payloads must never ride along in step records"
+
+
+def test_failing_step_keeps_data_and_render_bounds_it(leaves):
+    from any2agent import respond
+    import json as _json
+    rec = Recorder({"notes_list": {"ok": True, "status": 200, "data": [{"id": 1}]},
+                    "notes_get": {"ok": False, "status": 404, "error": "http_404",
+                                  "data": {"detail": "x" * 5000}}})
+    spec = _composite("combo_b", [{"tool": "notes_list", "args": {}},
+                       {"tool": "notes_get", "args": {"note_id": "$steps[0].data[0].id"}}])
+    ts = ToolSet("p", leaves.tools + [spec])
+    res = C.run(spec, {}, rec, by_name=ts.by_name())
+    assert res["failed_step"] == 1 and "data" in res["steps"][1]
+    out = _json.loads(respond.render(res, spec=spec, toolset=ts, cap=3000))
+    assert len(_json.dumps(out)) <= 3200  # bounded (cap + envelope tolerance)
+    assert "Composite step 1 (notes_get) failed" in out["hint"]
+    assert "Call notes_list first" in out["hint"]  # sibling suggestion survives
+
+
+def test_composite_error_hints_not_transport(leaves):
+    from any2agent import respond
+    base = {"ok": False, "composite": "combo", "failed_step": 1, "failed_tool": "notes_get"}
+    h = respond.explain({**base, "error": "binding_error: index 0 out of range"})
+    assert "binding" in h and "Could not reach" not in h
+    h = respond.explain({**base, "error": "unknown_tool: ghost"})
+    assert "re-run compose" in h
+    h = respond.explain({**base, "error": "nested composites are not allowed"})
+    assert "configuration error" in h

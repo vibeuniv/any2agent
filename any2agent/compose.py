@@ -120,10 +120,13 @@ def _llm_propose(toolset: ToolSet, chains, n: int, model_id: Optional[str]) -> O
     entry, model_string, _ = registry.resolve(model_id)
     if not entry:
         return None
+    # danger tools are excluded from the catalog entirely (defense-in-depth:
+    # validate() would reject them anyway, but the proposer never sees them)
     catalog = [{"name": t.name, "description": t.description,
-                "parameters": t.parameters, "write": bool(t.write), "danger": bool(t.danger)}
+                "parameters": t.parameters, "write": bool(t.write)}
                for t in toolset.tools
-               if not (t.defaults or {}).get("_disabled") and not composite.is_composite(t)]
+               if not (t.defaults or {}).get("_disabled")
+               and not composite.is_composite(t) and not t.danger]
     chains_txt = "; ".join("%s (x%d)" % ("->".join(c), cnt) for c, cnt in (chains or [])[:8]) or "(none recorded)"
     try:
         resp = registry.completion(
