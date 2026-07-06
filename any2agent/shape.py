@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Tuple
 
 from .spec import ToolSet, ToolSpec
 
-SHAPING_VERSION = 1
+SHAPING_VERSION = 2  # v2: + response_format promotion on collection reads
 
 # only names produced by the mechanical scanners are eligible for renaming
 _MECHANICAL = re.compile(r"^(get|post|put|patch|delete|head|options)_")
@@ -32,6 +32,11 @@ _CLEAN = re.compile(r"[^a-z0-9_]+")
 _PROMOTE_NOTE = " Prefer filters/limit over fetching everything — results can be large."
 _LIMIT_PARAM = {"type": "integer",
                 "description": "Max items to return (default 20). Use the smallest limit that answers the question."}
+_RESPONSE_FORMAT_PARAM = {
+    "type": "string", "enum": ["concise", "detailed"],
+    "description": ("concise (default) returns trimmed items; detailed keeps all "
+                    "fields when you need ids for follow-up calls."),
+}
 
 
 def _segments(path: str) -> List[str]:
@@ -95,13 +100,17 @@ def apply(toolset: ToolSet) -> Dict[str, Any]:
 
     skipped: List[Dict[str, str]] = []
     renamed: Dict[str, str] = {}   # new -> old
+    # names this module produced in a previous (lower-version) run — silently
+    # fine on re-run, not "curated" noise in the skipped report
+    ours = set((meta_sh.get("renamed") or {}).keys())
 
     # pass 1: propose names; resolve collisions before committing anything
     taken = {t.name for t in toolset.tools}
     proposals: List[Tuple[ToolSpec, str]] = []
     for t in toolset.tools:
         if not _MECHANICAL.match(t.name):
-            skipped.append({"name": t.name, "why": "not a mechanical name (curated?) — kept"})
+            if t.name not in ours:
+                skipped.append({"name": t.name, "why": "not a mechanical name (curated?) — kept"})
             continue
         new = _proposed_name(t)
         if not new:
@@ -142,11 +151,17 @@ def apply(toolset: ToolSet) -> Dict[str, Any]:
         if "limit" not in props:
             props["limit"] = dict(_LIMIT_PARAM)
             changed = True
+        if "response_format" not in props:
+            # render-time control (popped before dispatch, never sent to the API)
+            props["response_format"] = dict(_RESPONSE_FORMAT_PARAM)
+            changed = True
         if _PROMOTE_NOTE.strip() not in t.description:
             t.description = (t.description + _PROMOTE_NOTE)[:400]
             changed = True
         if changed:
             promoted += 1
 
-    toolset.meta["shaping"] = {"version": SHAPING_VERSION, "renamed": renamed}
+    # carry forward prior renames so upgrades stay noise-free and auditable
+    toolset.meta["shaping"] = {"version": SHAPING_VERSION,
+                               "renamed": {**(meta_sh.get("renamed") or {}), **renamed}}
     return {"renamed": len(renamed), "promoted": promoted, "skipped": skipped}

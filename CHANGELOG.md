@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **Response shaping (`respond.py`)** — tool results reach the model as
+  token-efficient, ALWAYS-valid JSON: lists truncate item-by-item with
+  `_meta.truncated {shown,total}` and a "refine with filters/limit" hint
+  (halving the budget on overflow — never a mid-structure slice), long text
+  gets a marker, and `concise` (default) drops null/empty fields while
+  `detailed` keeps everything for follow-up calls. Collection reads gain a
+  `response_format` enum param (render-time only — popped before dispatch,
+  never sent to the backend). Errors carry a deterministic actionable `hint`
+  per status class (422 schema guidance + server detail, 401/403 "don't
+  retry, tell the user", 404 suggests the sibling `*_list`/`*_search` tool,
+  429/5xx/transport guidance). Raw data stays untouched for the UI, eval
+  traces, and graders — only the LLM-facing message is shaped.
 - **Self-verification (`any2agent eval`)** — task-based eval harness: generates
   realistic multi-step tasks from the toolspec (LLM, with a deterministic
   no-key fallback), runs them through the *real* agent loop against the live

@@ -1,0 +1,172 @@
+"""LLM-facing tool-response rendering — token efficiency and actionable errors,
+per the "writing tools for agents" guidance.
+
+Before this layer, tool results reached the model as raw JSON with a blunt
+6000-char slice that could cut mid-structure. render() guarantees the model
+always sees VALID JSON: lists are truncated item-by-item (with an explicit
+"_meta" note steering toward filters/limit), long strings get a marker, and on
+overflow the item budget halves until it fits. Errors gain a deterministic
+`hint` telling the agent what to do next (404 on notes_get suggests notes_list
+— derived from the shaped resource_action naming, never guessed).
+
+Scope invariant: this shapes ONLY the message fed back to the LLM
+(core/agent._tool_msg). Adapter results, SSE events, eval traces, and grader
+state checks all keep seeing the raw data.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List, Optional, Tuple
+
+from .spec import ToolSpec, ToolSet
+
+_MODES = {"concise": 10, "detailed": 50}
+_MAX_STR = 500
+_TRUNC_MARK = "…[truncated]"
+
+
+# ── success-path shaping ─────────────────────────────────────────────────────
+
+def shape(data: Any, mode: str = "concise", max_items: Optional[int] = None,
+          max_str: int = _MAX_STR) -> Tuple[Any, List[str], List[Dict[str, int]]]:
+    """Structure-aware trim. Returns (shaped, notes, truncations) where
+    truncations = [{"shown","total"}] per truncated list. concise also drops
+    null/empty fields; detailed keeps every field (IDs stay available for
+    follow-up calls). Both modes bound list length and mark over-long string
+    values with a truncation marker."""
+    limit = max_items if max_items is not None else _MODES.get(mode, 10)
+    notes: List[str] = []
+    trunc: List[Dict[str, int]] = []
+
+    def walk(v: Any) -> Any:
+        if isinstance(v, list):
+            out = [walk(x) for x in v[:limit]]
+            if len(v) > limit:
+                trunc.append({"shown": limit, "total": len(v)})
+                notes.append("list truncated to %d of %d items — refine with "
+                             "filters or a smaller limit" % (limit, len(v)))
+            return out
+        if isinstance(v, dict):
+            out = {}
+            for k, val in v.items():
+                w = walk(val)
+                if mode == "concise" and (w is None or w == "" or w == [] or w == {}):
+                    continue
+                out[k] = w
+            return out
+        if isinstance(v, str) and len(v) > max_str:
+            notes.append("a long text field was shortened")
+            return v[:max_str] + _TRUNC_MARK
+        return v
+
+    shaped = walk(data)
+    return shaped, notes, trunc
+
+
+# ── error-path hints ─────────────────────────────────────────────────────────
+
+def _sibling_reader(spec: Optional[ToolSpec], toolset: Optional[ToolSet]) -> str:
+    """For a shaped name like notes_get, find notes_list / notes_search.
+    Deterministic: prefix match only — unshaped (mechanical) names never fire."""
+    if spec is None or toolset is None or "_" not in spec.name:
+        return ""
+    prefix = spec.name.rsplit("_", 1)[0]
+    names = {t.name for t in toolset.tools}
+    for suffix in ("list", "search"):
+        cand = "%s_%s" % (prefix, suffix)
+        if cand in names and cand != spec.name:
+            return " Call %s first to find a valid id." % cand
+    return ""
+
+
+def explain(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
+            toolset: Optional[ToolSet] = None) -> str:
+    """One deterministic, actionable sentence for a failed call."""
+    status = result.get("status")
+    if status in (400, 422):
+        detail = ""
+        body = result.get("data")
+        if body:
+            detail = " Server detail: " + json.dumps(body, ensure_ascii=False, default=str)[:400]
+        return ("The arguments were rejected — re-check required parameters and "
+                "types against this tool's schema." + detail)
+    if status in (401, 403):
+        return ("Not permitted for this user's session (RBAC). Do not retry with "
+                "different arguments; tell the user instead.")
+    if status == 404:
+        return ("Resource not found — the identifier may be wrong or stale."
+                + _sibling_reader(spec, toolset))
+    if status == 405:
+        return "Method not allowed — this operation may not exist on the target; try a different tool."
+    if status == 429:
+        return "Rate limited — wait before retrying, and prefer narrower queries."
+    if isinstance(status, int) and status >= 500:
+        return ("The target API failed internally — retry once; if it persists, "
+                "report the failure to the user.")
+    if status is None and result.get("error"):
+        err = str(result["error"])
+        if err == "unknown_tool":
+            return "No such tool — pick one from the provided tool list, or call search_tools."
+        if "_" in err and " " not in err:
+            return ""  # other local error codes (snake_case): no transport hint
+        return ("Could not reach the target API — it may be down or the base URL "
+                "wrong. Do not retry repeatedly.")
+    return ""
+
+
+# ── the LLM message ──────────────────────────────────────────────────────────
+
+def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
+           toolset: Optional[ToolSet] = None, response_format: Optional[str] = None,
+           cap: int = 6000) -> str:
+    """Serialize a tool result for the model: always valid JSON, always ≤ cap.
+    On overflow the list budget halves until it fits; as a last resort the data
+    is omitted with an explicit _meta note (never a mid-structure slice)."""
+    out = dict(result)
+    mode = response_format if response_format in _MODES else "concise"
+
+    if not out.get("ok", True):
+        hint = explain(out, spec, toolset)
+        if hint:
+            out["hint"] = hint
+        # error bodies can be huge too — bound them the same way
+        if "data" in out:
+            out["data"], _, _ = shape(out["data"], mode="concise")
+        return _fit(out, cap)
+
+    limit = _MODES[mode]
+    while True:
+        shaped, notes, trunc = shape(out.get("data"), mode=mode, max_items=limit)
+        candidate = dict(out)
+        if notes:
+            meta: Dict[str, Any] = {"hint": "; ".join(sorted(set(notes)))}
+            if trunc:
+                meta["truncated"] = trunc[0] if len(trunc) == 1 else trunc
+            if isinstance(shaped, list):
+                candidate["data"] = {"items": shaped, "_meta": meta}
+            elif isinstance(shaped, dict):
+                shaped = dict(shaped)
+                shaped["_meta"] = meta
+                candidate["data"] = shaped
+            else:
+                candidate["data"] = shaped
+        else:
+            candidate["data"] = shaped
+        txt = json.dumps(candidate, ensure_ascii=False, default=str)
+        if len(txt) <= cap:
+            return txt
+        if limit <= 1:
+            candidate["data"] = {"_meta": {"omitted": True,
+                                           "hint": "result too large to show — use filters/limit "
+                                                   "or request specific items"}}
+            return json.dumps(candidate, ensure_ascii=False, default=str)
+        limit = max(1, limit // 2)
+
+
+def _fit(obj: Dict[str, Any], cap: int) -> str:
+    txt = json.dumps(obj, ensure_ascii=False, default=str)
+    if len(txt) <= cap:
+        return txt
+    slim = dict(obj)
+    slim["data"] = {"_meta": {"omitted": True, "hint": "error body too large to show"}}
+    return json.dumps(slim, ensure_ascii=False, default=str)

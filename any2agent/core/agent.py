@@ -156,6 +156,10 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                 msgs.append(_tool_msg(i, name, result))
                 continue
 
+            # response_format is OURS (render-time), never the backend API's —
+            # pop it before dispatch so it can't leak into query/body.
+            fmt = args.pop("response_format", None) if isinstance(args, dict) else None
+
             res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False, toolset=toolset)
             if res.get("confirm_required"):
                 if ctx.get("auto_confirm"):
@@ -168,7 +172,7 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                     yield {"type": "done", "model": rid}
                     return
             yield {"type": "tool", "name": name, "args": args, "result": res}
-            msgs.append(_tool_msg(i, name, res))
+            msgs.append(_tool_msg(i, name, res, spec=spec, toolset=toolset, response_format=fmt))
         # loop continues: feed tool results back to the model
 
     yield {"type": "done", "model": rid}
@@ -179,9 +183,17 @@ def confirm_and_run(name: str, args: Dict[str, Any], toolset: ToolSet, adapter: 
     spec = toolset.by_name().get(name)
     if not spec:
         return {"ok": False, "error": "unknown_tool"}
-    return dispatch.execute(spec, args or {}, adapter, ctx=ctx or {}, confirmed=True, toolset=toolset)
+    args = dict(args or {})
+    args.pop("response_format", None)  # render-time control — never the backend's
+    return dispatch.execute(spec, args, adapter, ctx=ctx or {}, confirmed=True, toolset=toolset)
 
 
-def _tool_msg(idx: int, name: str, result: Any) -> Dict[str, Any]:
-    return {"role": "tool", "tool_call_id": "call_%d" % idx, "name": name,
-            "content": json.dumps(result, ensure_ascii=False)[:6000]}
+def _tool_msg(idx: int, name: str, result: Any, spec=None, toolset=None,
+              response_format=None) -> Dict[str, Any]:
+    """The LLM-facing tool message. respond.render guarantees valid JSON within
+    the cap (structure-aware truncation + error hints) — never a raw slice.
+    The UI event and eval trace keep the unshaped result."""
+    from .. import respond
+    content = respond.render(result if isinstance(result, dict) else {"ok": True, "data": result},
+                             spec=spec, toolset=toolset, response_format=response_format)
+    return {"role": "tool", "tool_call_id": "call_%d" % idx, "name": name, "content": content}
