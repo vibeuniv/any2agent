@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format loosely follows
 ## [Unreleased]
 
 ### Added
+- **`any2agent migrate`** — modernize curated files after tool shaping:
+  rewrites old tool-name references (from aliases + the shaping audit map) in
+  `evals.json`, `eval-lessons.json`, and any `--files` JSON. `--dry-run`
+  previews; real runs write `.premigrate.bak` backups and are idempotent.
+- **Per-step composite telemetry** — steps inside a composite now also record
+  under their own tool names, so drift detection points at the failing inner
+  tool, not just the composite.
+- **Drift alert webhook** — set `ANY2AGENT_ALERT_WEBHOOK` and a tool crossing
+  into suspect state POSTs one JSON alert per drift episode (re-armed after
+  recovery); fire-and-forget, never blocks or breaks a conversation.
+- **Field projection** — collection reads gain a `fields` param (shaping v3):
+  the model can request just the columns it needs (`fields="id,title"`);
+  applied render-time only, never sent to your API.
+- **Pagination steering** — when a truncated tool exposes `offset`/`page`/
+  `cursor`-style params, the truncation hint names the exact next call
+  ("pass offset=10 for the next page").
+- **Embedding tool search** — with `OPENAI_API_KEY` set, `search_tools`
+  ranking upgrades to embedding similarity (via litellm, no new dependency),
+  with silent keyword fallback on any failure.
+- **PDCA closing docs** — completion reports for all seven features
+  (docs/04-report/) and the missing eval-console gap analysis.
 - **Response shaping (`respond.py`)** — tool results reach the model as
   token-efficient, ALWAYS-valid JSON: lists truncate item-by-item with
   `_meta.truncated {shown,total}` and a "refine with filters/limit" hint
