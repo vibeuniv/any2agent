@@ -179,6 +179,19 @@ shows up in the browser immediately — no server restart.
 
 ---
 
+## 5.5 Housekeeping & alerts
+
+```bash
+any2agent migrate --project yourapp --dry-run   # preview old→new tool-name rewrites
+any2agent migrate --project yourapp             # modernize evals.json / lessons (with .premigrate.bak backups)
+export ANY2AGENT_ALERT_WEBHOOK=https://hooks.example.com/drift   # one POST per drift episode
+```
+
+Old tool names keep working forever via aliases — `migrate` is optional tidying.
+Collection reads also accept `fields="id,title"` (server-side projection for the
+model's reading) and name their paging param in truncation hints; with
+`OPENAI_API_KEY` set, tool discovery upgrades to embedding search automatically.
+
 ## 6. Everyday cheat-sheet
 
 ```bash
