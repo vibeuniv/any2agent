@@ -116,6 +116,8 @@
   <div class="logo">✦</div>
   <div class="brand"><span class="nm">{{PROJECT}}</span><span class="sub" id="sub">any2agent · API agent</span></div>
   <div class="spacer"></div>
+  <a class="chip" id="evalBadge" href="evals/ui" target="_blank" title="Eval console"
+     style="display:none;text-decoration:none"></a>
   <span class="chip" id="modelChip" title="Change model">model <span class="car">▾</span></span>
   <div class="menu" id="modelMenu"></div>
 </header>
@@ -189,6 +191,15 @@ fetch('info').then(function(r){return r.json();}).then(function(d){
   MODELS=d.models||[]; DEFAULT_ID=d.default_model_id; chipLabel();
   if(d.project) sub.textContent='any2agent · '+(d.tools||0)+' tools';
 });
+
+// eval trust badge — read-only status from the eval console; hidden on any failure
+fetch('evals').then(function(r){return r.json();}).then(function(d){
+  var b=document.getElementById('evalBadge');
+  if(!d.evaluated){b.textContent='— not evaluated';b.style.display='inline-flex';return;}
+  var L=d.latest||{};
+  b.textContent=(L.passed?'✅ ':'❌ ')+(L.rate||0).toFixed(2)+' · '+(d.history||[]).length+' runs';
+  b.style.display='inline-flex';
+}).catch(function(){});
 
 function setBusy(b){busy=b;sendBtn.disabled=b||!inp.value.trim();sendBtn.innerHTML=b?'…':'➤';}
 function addMe(t){hero.style.display='none';var d=document.createElement('div');d.className='turn me';d.innerHTML='<div class="b">'+esc(t)+'</div>';col.appendChild(d);scrollDown();}

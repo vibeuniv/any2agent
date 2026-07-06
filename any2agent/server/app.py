@@ -3,9 +3,13 @@
   GET  /info     -> {project, llm, models, default_model_id, tools}
   POST /chat     -> SSE stream of agent events (delta/tool/confirm/done)
   POST /confirm  -> execute a previously gated write/danger tool
+  GET  /evals    -> read-only eval status (history + trend + lessons); files are
+                    re-read per request so a CLI eval run shows up immediately
+  GET  /evals/ui -> single-file eval dashboard
   GET  /         -> minimal chat UI (project-named)
 
 Everything is keyed by the project name loaded from <project>.any2agent.toml.
+The server never runs or mutates evals — `any2agent eval` (CLI) owns that.
 """
 from __future__ import annotations
 
@@ -45,6 +49,13 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
     app = FastAPI(title="%s Agent" % cfg.project)
     adapter = RestAdapter(cfg.base_url, cfg.auth)
     base_ctx: Dict[str, Any] = {"project": cfg.project, "state_dir": cfg.state_dir()}
+
+    # eval-derived guidance (if `any2agent eval` left lessons): injected as a
+    # system note per turn so past evaluation failures aren't repeated.
+    from ..evals import lessons as eval_lessons
+    _lessons = eval_lessons.load(cfg.lessons_path())
+    if _lessons:
+        base_ctx["lessons"] = [l["guidance"] for l in _lessons]
 
     web_dir = os.path.join(os.path.dirname(__file__), "web")
 
@@ -103,6 +114,38 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
         res = memory.capture_feedback(rctx.get("state_dir", ""), rctx.get("owner", "anon"),
                                       body.rating, body.correction)
         return JSONResponse(res)
+
+    @app.get("/evals")
+    def evals():
+        # re-read files on every request: an eval run after server start must
+        # show up without a restart (no boot-time caching)
+        from ..evals import history as eval_history
+        entries = eval_history.load(cfg.state_dir(), n=20)
+        lessons = eval_lessons.load(cfg.lessons_path())
+        if not entries and not lessons:
+            return {"evaluated": False, "project": cfg.project}
+        tasks_total = 0
+        try:
+            if os.path.exists(cfg.evals_path()):
+                with open(cfg.evals_path(), encoding="utf-8") as f:
+                    tasks_total = len((json.load(f) or {}).get("tasks", []))
+        except Exception:
+            pass
+        return {
+            "evaluated": bool(entries),
+            "project": cfg.project,
+            "latest": entries[-1] if entries else None,
+            "trend": eval_history.trend_line(entries),
+            "history": entries,
+            "lessons": [{"task_id": l.get("task_id"), "class": l.get("class"),
+                         "guidance": l.get("guidance")} for l in lessons],
+            "tasks_total": tasks_total,
+        }
+
+    @app.get("/evals/ui", response_class=HTMLResponse)
+    def evals_ui():
+        with open(os.path.join(web_dir, "evals.html"), encoding="utf-8") as f:
+            return f.read().replace("{{PROJECT}}", cfg.project)
 
     @app.get("/", response_class=HTMLResponse)
     def index():

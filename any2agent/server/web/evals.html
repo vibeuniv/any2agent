@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{PROJECT}} · evals</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9C%A6%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#0f1419; --mut:#5b6470; --line:#e6e8eb; --bg:#fbfcfd; --card:#fff;
+    --user:#eef4ff; --accent:#2f6df6; --ok:#16a34a; --bad:#dc2626; --warn:#b45309;
+    --g1:#2f6df6; --g2:#7c5cff; --g3:#e0529c;
+    --shadow:0 1px 2px rgba(16,20,30,.06),0 8px 24px rgba(16,20,30,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--ink:#e7eaee;--mut:#9aa3af;--line:#262b33;--bg:#0d1117;--card:#161b22;
+          --user:#1b2435;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Apple SD Gothic Neo",sans-serif;
+       color:var(--ink);background:var(--bg)}
+  header{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--card)}
+  .logo{width:30px;height:30px;border-radius:9px;background:conic-gradient(from 200deg,var(--g1),var(--g2),var(--g3),var(--g1));
+        display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;box-shadow:var(--shadow)}
+  .brand{display:flex;flex-direction:column;line-height:1.15}
+  .brand .nm{font-weight:700;font-size:15px}
+  .brand .sub{font-size:11.5px;color:var(--mut)}
+  .spacer{flex:1}
+  a.back{font-size:12.5px;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 11px}
+  main{max-width:780px;margin:0 auto;padding:26px 20px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin:14px 0}
+  h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:0 0 12px}
+  .status{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .rate{font-size:34px;font-weight:800}
+  .rate.ok{color:var(--ok)} .rate.bad{color:var(--bad)}
+  .trend{color:var(--mut);font-size:13px}
+  .pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px}
+  .pill.ok{background:rgba(22,163,74,.12);color:var(--ok)}
+  .pill.bad{background:rgba(220,38,38,.12);color:var(--bad)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{color:var(--mut);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:7px 8px;border-bottom:1px solid var(--line)}
+  tr:last-child td{border-bottom:0}
+  .cls{font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px;background:var(--user);color:var(--accent);white-space:nowrap}
+  .fix{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
+  .fix:last-child{border-bottom:0}
+  .fix .tid{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);white-space:nowrap}
+  .note{color:var(--mut);font-size:12px;margin-top:10px}
+  .empty{text-align:center;color:var(--mut);padding:60px 0}
+  .empty code{background:var(--user);border-radius:6px;padding:2px 8px}
+  svg.spark{display:block;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">✦</div>
+  <div class="brand"><span class="nm">{{PROJECT}}</span><span class="sub">any2agent · eval console</span></div>
+  <div class="spacer"></div>
+  <a class="back" href="/">← chat</a>
+</header>
+<main id="main"><div class="empty">Loading…</div></main>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtTs = ts => new Date(ts * 1000).toLocaleString();
+
+function spark(hist){
+  if (hist.length < 2) return '';
+  const w = 220, h = 36, xs = hist.map((e, i) => i / (hist.length - 1) * (w - 4) + 2);
+  const ys = hist.map(e => h - 3 - (e.rate || 0) * (h - 6));
+  const pts = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
+  const last = hist[hist.length - 1];
+  return `<svg class="spark" width="${w}" height="${h}" aria-label="rate trend">
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${xs[xs.length-1]}" cy="${ys[ys.length-1]}" r="3" fill="${last.passed ? 'var(--ok)' : 'var(--bad)'}"/></svg>`;
+}
+
+fetch('/evals').then(r => r.json()).then(d => {
+  const m = document.getElementById('main');
+  if (!d.evaluated){
+    m.innerHTML = `<div class="empty"><p>Not evaluated yet.</p>
+      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> then refresh.</p></div>`;
+    return;
+  }
+  const L = d.latest, ok = L.passed;
+  let html = `<div class="card"><h2>Status</h2><div class="status">
+      <span class="rate ${ok?'ok':'bad'}">${(L.rate ?? 0).toFixed(2)}</span>
+      <span class="pill ${ok?'ok':'bad'}">${ok?'GATE PASSED':'BELOW THRESHOLD'}</span>
+      <span class="trend">${esc(d.trend)} · ${d.tasks_total} task(s) · last run ${fmtTs(L.ts)}</span>
+    </div>${spark(d.history)}</div>`;
+
+  const fixes = L.fixes || [];
+  if (fixes.length){
+    html += `<div class="card"><h2>What to fix</h2>` + fixes.map(f =>
+      `<div class="fix"><span class="tid">${esc(f.task_id)}</span><span class="cls">${esc(f.class)}</span>
+       <span>${esc(f.guidance)}</span></div>`).join('') + `</div>`;
+  }
+
+  html += `<div class="card"><h2>History</h2><table><thead>
+      <tr><th>when</th><th>rate</th><th>rated</th><th>gate</th><th>failed</th></tr></thead><tbody>` +
+    d.history.slice().reverse().map(e =>
+      `<tr><td>${fmtTs(e.ts)}</td><td>${(e.rate ?? 0).toFixed(2)}</td><td>${e.rated}</td>
+       <td><span class="pill ${e.passed?'ok':'bad'}">${e.passed?'PASS':'FAIL'}</span></td>
+       <td>${esc((e.failed || []).join(', ') || '—')}</td></tr>`).join('') +
+    `</tbody></table></div>`;
+
+  if (d.lessons.length){
+    html += `<div class="card"><h2>Active lessons</h2>` + d.lessons.map(l =>
+      `<div class="fix"><span class="cls">${esc(l.class)}</span><span>${esc(l.guidance)}</span></div>`).join('') +
+      `<p class="note">These lines are injected as guidance into every chat turn until the task passes.</p></div>`;
+  }
+  m.innerHTML = html;
+}).catch(() => {
+  document.getElementById('main').innerHTML = '<div class="empty">Failed to load /evals.</div>';
+});
+</script>
+</body>
+</html>
