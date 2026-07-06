@@ -54,6 +54,9 @@ pip install git+https://github.com/vibeuniv/any2agent
 
 ## Quickstart (2 steps)
 
+> Full step-by-step guide (connect → eval → serve → console, CI usage,
+> troubleshooting): **[docs/USAGE.md](docs/USAGE.md)**
+
 ```bash
 # 1) one model key — any one of these
 export OPENAI_API_KEY=...     # or ANTHROPIC_API_KEY / GEMINI_API_KEY / MOONSHOT_API_KEY
@@ -106,8 +109,42 @@ Runnable example: [`examples/petstore`](examples/petstore).
 |---|---|
 | `yourapp.toolspec.json` | the tools — one per API operation. Editable, re-runnable. |
 | `yourapp.any2agent.toml` | config: base URL, auth method, default model. |
+| `yourapp.evals.json` | eval tasks for `any2agent eval` — auto-generated, then yours to curate. |
 
 Re-run `connect`/`init` whenever your API changes.
+
+---
+
+## Self-verification — `any2agent eval`
+
+The connect loop proves your tools *exist, are well-formed, respond, and get
+selected*. `eval` proves the thing that actually matters: **the agent completes
+realistic multi-step tasks** against your live API.
+
+```bash
+any2agent eval --project yourapp            # read-only tasks (safe default)
+any2agent eval --project yourapp --live-write   # allow write tasks (never on production)
+```
+
+- Tasks are generated from your toolspec (multi-step by design), saved to
+  `yourapp.evals.json`, and validated — curate them into a regression suite.
+- Each task runs through the **real** agent loop; grading prefers deterministic
+  checks (which tools ran, re-reading state, answer content) over an LLM judge.
+- Gate: completion rate ≥ 0.8 → exit 0; below → exit 1 with per-task reasons.
+  CI-friendly (`--json report.json`).
+- `connect --eval` runs it as a final gate and feeds failures back into repair
+  (description rewrites with the failure as context, param synthesis from 4xx
+  calls).
+- Write tasks are opt-in, tag their payloads with `[a2a-eval]`, clean up after
+  themselves, and report any residue honestly.
+- **It learns from failures.** Each run is recorded (`eval --history` shows the
+  trend), every failure becomes one actionable "what to fix" line, and lessons
+  persist to `yourapp.eval-lessons.json` — `serve` injects them as guidance so
+  the agent doesn't repeat the same mistake. `eval --fix` applies automatic
+  repairs on the spot.
+- **See it in the browser.** The chat header shows a trust badge
+  (`✅ 0.88 · 3 runs`) that links to `/evals/ui` — a read-only console with the
+  rate trend, run history, what-to-fix lines, and active lessons.
 
 ---
 
@@ -195,7 +232,8 @@ for single-user/local. Set `memory_enabled = false` to turn it off.
 2. auth      detect the login/session scheme → passthrough plan
 3. verify    coverage · correctness · live calls · agent tool-selection
 4. repair    fill gaps (params, descriptions, missing routes) → re-verify
-5. serve     chat UI + /chat API  (multi-model, write/danger confirm gate)
+5. eval      (opt-in) realistic tasks through the real agent loop → completion gate
+6. serve     chat UI + /chat API  (multi-model, write/danger confirm gate)
 ```
 
 The loop stops when **all checks pass**, or at a budget/no-progress limit — and

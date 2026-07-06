@@ -3,6 +3,45 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- **Self-verification (`any2agent eval`)** — task-based eval harness: generates
+  realistic multi-step tasks from the toolspec (LLM, with a deterministic
+  no-key fallback), runs them through the *real* agent loop against the live
+  API, and grades completion with deterministic checks (tools called, state
+  re-read, answer content) plus an advisory LLM judge. Gates on completion
+  rate (default ≥ 0.8), CI-friendly exit codes, `--json` report.
+- **`task_eval` critic** (`verifier.py`) — 5th critic alongside
+  coverage/accuracy/liveness/agent_e2e; skipped honestly without a key/target.
+- **`connect --eval`** — runs the task eval as a final gate; failures feed the
+  existing repair channels (description rewrite with the failure as context,
+  parameter synthesis from 4xx calls) and the eval re-runs once.
+- **Curatable eval sets** — tasks persist as `<project>.evals.json`; a curated
+  file always wins over regeneration (`--regen` to override).
+- **Write-task safety** — write tasks are opt-in (`--live-write` + interactive
+  confirmation), must tag payloads with `[a2a-eval]`, run cleanup calls after
+  grading, and report un-cleaned residue honestly. Danger tools are allowed in
+  cleanup only.
+- **Test suite** — pytest coverage for the grader, runner confirm policy,
+  task generation/validation, `task_eval` gating math, and an integration test
+  against a real local HTTP server.
+- **Eval feedback loop** — every `eval` run is recorded to
+  `.any2agent-state/<project>/eval-history.jsonl` (`--history` shows the trend);
+  failures are classified into five deterministic causes (wrong_tool / bad_args /
+  tool_error / state_mismatch / answer_gap) and printed as one actionable
+  "what to fix" line each. Failures also persist as **lessons**
+  (`<project>.eval-lessons.json`) that `serve` injects as a system note so the
+  agent avoids repeating them; lessons self-clean when tasks pass or tools
+  disappear. `eval --fix` applies the repair channels (description rewrite,
+  param synthesis) immediately.
+- **Eval console (web)** — read-only `GET /evals` (history + trend + lessons,
+  files re-read per request so CLI runs show up without a restart), a trust
+  badge in the chat header (`✅ 0.88 · 3 runs`, links to the console), and a
+  single-file dashboard at `/evals/ui` showing status, sparkline trend,
+  per-failure "what to fix" lines, run history, and active lessons. The server
+  never runs or mutates evals — the CLI owns that.
+
 ## [0.1.0] — initial release
 
 First public release. Point it at a project, get a verified chat agent.
