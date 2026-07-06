@@ -120,6 +120,20 @@ def test_render_empty_and_nonempty():
     assert "- g1" in txt and "- g2" in txt
 
 
+def test_multi_tool_guidance_survives_stale_filter(toolset):
+    # regression (found by the first real-key run): a wrong_tool lesson naming
+    # SEVERAL expected tools must not be dropped by the stale filter
+    task = EvalTask(id="t1", prompt="list then read",
+                    expected_tools=[["get__notes", "get__notes_note_id"]])
+    rep = {"results": [{"task_id": "t1", "success": False, "ungraded": False,
+                        "reasons": ["expected tools not covered (called: get__notes)"],
+                        "metrics": {"called": ["get__notes"]}}]}
+    built = L.build(rep, {"t1": task})
+    kept = L.merge_save(str(__import__("tempfile").mkdtemp()) + "/l.json", "p",
+                        built, [], toolset)
+    assert kept, "multi-tool guidance must survive persistence"
+
+
 def test_stale_detection_resolves_aliases(toolset):
     # a lesson written pre-shaping (old tool name) must survive stale filtering
     toolset.tools[0].aliases.append("legacy__notes")

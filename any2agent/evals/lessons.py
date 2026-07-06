@@ -46,8 +46,10 @@ def classify(result: Dict[str, Any]) -> str:
 def _guidance(cls: str, result: Dict[str, Any], task) -> str:
     when = (task.prompt or "")[:120]
     m = result.get("metrics") or {}
-    called = ",".join(m.get("called") or []) or "no tools"
-    expected = ",".join(sorted({n for path in task.expected_tools for n in path})) or "the expected tools"
+    # join with ', ' (not bare ','): the stale-tool filter tokenizes guidance by
+    # whitespace, so 'a,b' would form one unknown token and silently drop the lesson
+    called = ", ".join(m.get("called") or []) or "no tools"
+    expected = ", ".join(sorted({n for path in task.expected_tools for n in path})) or "the expected tools"
     if cls == "wrong_tool":
         return ("For requests like %r, use %s — the model called %s instead."
                 % (when, expected, called))
