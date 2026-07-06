@@ -6,9 +6,11 @@ mechanical 1-route-=-1-tool output into agent-friendly tools, per Anthropic's
             so related tools group under a resource prefix and the intent is in
             the name. Old names are kept as aliases — existing toolspecs, eval
             tasks, and lessons keep resolving.
-  promote   collection reads get a `limit` param and a "prefer filters over
-            fetching everything" nudge — agents pay for context; a full table
-            dump is the expensive default this steers away from.
+  promote   collection reads get `limit`, `response_format`, and `fields` params
+            plus a "prefer filters over fetching everything" nudge — agents pay
+            for context; a full table dump is the expensive default this steers
+            away from. `fields` requests a server-side projection (fewer keys per
+            item); render() also applies it defensively (see respond.py).
 
 Conservative by design: anything that doesn't match the mechanical naming
 pattern (e.g. a curated OpenAPI operationId, or a human-edited name) or would
@@ -22,7 +24,7 @@ from typing import Any, Dict, List, Tuple
 
 from .spec import ToolSet, ToolSpec
 
-SHAPING_VERSION = 2  # v2: + response_format promotion on collection reads
+SHAPING_VERSION = 3  # v2: + response_format promotion; v3: + fields projection param
 
 # only names produced by the mechanical scanners are eligible for renaming
 _MECHANICAL = re.compile(r"^(get|post|put|patch|delete|head|options)_")
@@ -36,6 +38,11 @@ _RESPONSE_FORMAT_PARAM = {
     "type": "string", "enum": ["concise", "detailed"],
     "description": ("concise (default) returns trimmed items; detailed keeps all "
                     "fields when you need ids for follow-up calls."),
+}
+_FIELDS_PARAM = {
+    "type": "string",
+    "description": ("Comma-separated field names to include in each item "
+                    "(server-side projection for your reading; e.g. 'id,title')."),
 }
 
 
@@ -154,6 +161,11 @@ def apply(toolset: ToolSet) -> Dict[str, Any]:
         if "response_format" not in props:
             # render-time control (popped before dispatch, never sent to the API)
             props["response_format"] = dict(_RESPONSE_FORMAT_PARAM)
+            changed = True
+        if "fields" not in props:
+            # projection request: honoured server-side when the API supports it,
+            # and applied defensively at render time regardless (see respond.py)
+            props["fields"] = dict(_FIELDS_PARAM)
             changed = True
         if _PROMOTE_NOTE.strip() not in t.description:
             t.description = (t.description + _PROMOTE_NOTE)[:400]

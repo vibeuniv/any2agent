@@ -1,5 +1,6 @@
 """response-shaping: structure-aware truncation, concise/detailed, error hints,
-render validity guarantees, response_format promotion + runtime pop."""
+render validity guarantees, response_format promotion + runtime pop, pagination
+steering, and fields projection."""
 import json
 
 from any2agent import respond, shape
@@ -67,6 +68,92 @@ def test_render_omits_as_last_resort():
     assert d["data"]["_meta"]["omitted"] is True
 
 
+# ── render() pagination steering ──────────────────────────────────────────────
+
+def _spec_with(params):
+    return ToolSpec(name="things_list", description="list things",
+                    parameters={"type": "object", "properties": params},
+                    backing={"method": "GET", "path": "/things"})
+
+
+def test_render_paging_hint_names_offset_param():
+    spec = _spec_with({"offset": {"type": "integer"}})
+    out = respond.render({"ok": True, "status": 200, "data": _items(40)}, spec=spec)
+    hint = json.loads(out)["data"]["_meta"]["hint"]
+    assert "list truncated to 10 of 40" in hint
+    assert "pass offset=10 for the next page" in hint
+
+
+def test_render_paging_hint_cursor_is_token_style():
+    spec = _spec_with({"cursor": {"type": "string"}})
+    out = respond.render({"ok": True, "status": 200, "data": _items(40)}, spec=spec)
+    hint = json.loads(out)["data"]["_meta"]["hint"]
+    assert "use the cursor/next token from the response" in hint
+
+
+def test_render_paging_hint_unchanged_without_paging_param():
+    # a tool exposing only limit (no paging cursor/offset) keeps the generic nudge
+    spec = _spec_with({"limit": {"type": "integer"}})
+    out = respond.render({"ok": True, "status": 200, "data": _items(40)}, spec=spec)
+    hint = json.loads(out)["data"]["_meta"]["hint"]
+    assert "refine with filters or a smaller limit" in hint
+    assert "offset" not in hint and "cursor" not in hint
+    # and with no spec at all, likewise unchanged
+    out2 = respond.render({"ok": True, "status": 200, "data": _items(40)})
+    assert "refine with filters or a smaller limit" in json.loads(out2)["data"]["_meta"]["hint"]
+
+
+# ── render() fields projection ────────────────────────────────────────────────
+
+def test_render_fields_projection_bare_list():
+    data = [{"id": i, "title": "t%d" % i, "secret": "s", "body": "b"} for i in range(3)]
+    out = respond.render({"ok": True, "status": 200, "data": data}, fields="title")
+    d = json.loads(out)
+    items = d["data"]["items"]
+    assert all(set(it.keys()) == {"id", "title"} for it in items)  # id kept, secret/body dropped
+    assert "projected to fields: title" in d["data"]["_meta"]["hint"]
+
+
+def test_render_fields_projection_wrapper_shape():
+    data = {"results": [{"id": i, "title": "t%d" % i, "secret": "s"} for i in range(3)],
+            "total": 3}
+    out = respond.render({"ok": True, "status": 200, "data": data}, fields="id, title")
+    d = json.loads(out)
+    assert d["data"]["total"] == 3  # non-list sibling untouched
+    for it in d["data"]["results"]:
+        assert set(it.keys()) == {"id", "title"}
+    assert "projected to fields: id, title" in d["data"]["_meta"]["hint"]
+
+
+def test_render_fields_projection_preserves_id_and_skips_non_dicts():
+    data = {"items": [{"id": 1, "name": "x", "extra": "e"}, "plain-string", 42]}
+    out = respond.render({"ok": True, "status": 200, "data": data}, fields="name")
+    d = json.loads(out)
+    items = d["data"]["items"]
+    assert items[0] == {"id": 1, "name": "x"}       # id preserved though not requested
+    assert items[1] == "plain-string" and items[2] == 42  # non-dict items untouched
+
+
+def test_render_fields_projection_composes_with_truncation_and_paging():
+    spec = _spec_with({"offset": {"type": "integer"}})
+    data = [{"id": i, "title": "t%d" % i, "blob": "x" * 40} for i in range(40)]
+    out = respond.render({"ok": True, "status": 200, "data": data}, spec=spec, fields="title")
+    d = json.loads(out)
+    items = d["data"]["items"]
+    assert len(items) == 10 and all(set(it.keys()) == {"id", "title"} for it in items)
+    hint = d["data"]["_meta"]["hint"]
+    assert "pass offset=10 for the next page" in hint
+    assert "projected to fields: title" in hint
+
+
+def test_render_fields_no_note_when_nothing_to_project():
+    # a single object (no list) requests fields — honest report: no projection note
+    out = respond.render({"ok": True, "status": 200, "data": {"id": 1, "title": "x"}}, fields="title")
+    d = json.loads(out)
+    assert "_meta" not in d["data"]  # no notes at all -> no wrapper meta
+    assert d["data"] == {"id": 1, "title": "x"}
+
+
 # ── explain() error hints ────────────────────────────────────────────────────
 
 def _shaped_ts():
@@ -120,19 +207,52 @@ def test_shape_v2_promotes_response_format():
     assert "response_format" not in ts.by_name()["notes_get"].parameters["properties"]
 
 
-def test_shape_v1_toolspec_gets_v2_promotion_without_rename_noise():
+def test_shape_v1_toolspec_upgrades_to_current_without_rename_noise():
     ts = _shaped_ts()
     ts.meta["shaping"] = {"version": 1, "renamed": ts.meta["shaping"]["renamed"]}
-    # strip v2 additions to simulate a v1 artifact
-    ts.by_name()["notes_list"].parameters["properties"].pop("response_format")
+    # strip v2/v3 additions to simulate a v1 artifact
+    props = ts.by_name()["notes_list"].parameters["properties"]
+    props.pop("response_format", None)
+    props.pop("fields", None)
     res = shape.apply(ts)
     assert res.get("noop") is not True
     assert "response_format" in ts.by_name()["notes_list"].parameters["properties"]
+    assert "fields" in ts.by_name()["notes_list"].parameters["properties"]
     assert res["renamed"] == 0
     # our own previously-shaped names must not appear as skipped noise
     assert res["skipped"] == []
-    assert ts.meta["shaping"]["version"] == 2
+    assert ts.meta["shaping"]["version"] == shape.SHAPING_VERSION
     assert ts.meta["shaping"]["renamed"]["notes_list"] == "get__notes"  # audit trail kept
+
+
+def test_shape_v3_promotes_fields_param():
+    ts = _shaped_ts()
+    props = ts.by_name()["notes_list"].parameters["properties"]
+    assert props["fields"]["type"] == "string"
+    assert "projection" in props["fields"]["description"]
+    # detail/read-singleton reads never get it
+    assert "fields" not in ts.by_name()["notes_get"].parameters["properties"]
+
+
+def test_shape_v2_toolspec_gets_v3_fields_without_rename_noise():
+    ts = _shaped_ts()  # fresh apply -> already at SHAPING_VERSION (v3)
+    # simulate a v2 artifact: version 2, fields not yet present
+    ts.meta["shaping"] = {"version": 2, "renamed": ts.meta["shaping"]["renamed"]}
+    ts.by_name()["notes_list"].parameters["properties"].pop("fields")
+    res = shape.apply(ts)
+    assert res.get("noop") is not True
+    assert "fields" in ts.by_name()["notes_list"].parameters["properties"]
+    # response_format from v2 is left intact (only-when-absent promotion)
+    assert "response_format" in ts.by_name()["notes_list"].parameters["properties"]
+    assert res["renamed"] == 0
+    assert res["skipped"] == []
+    assert ts.meta["shaping"]["version"] == 3
+    assert ts.meta["shaping"]["renamed"]["notes_list"] == "get__notes"  # audit trail kept
+
+
+def test_shape_v3_upgrade_is_idempotent():
+    ts = _shaped_ts()
+    assert shape.apply(ts) == {"renamed": 0, "promoted": 0, "skipped": [], "noop": True}
 
 
 def test_tool_msg_valid_json_and_format_pop(toolset):

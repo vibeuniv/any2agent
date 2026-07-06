@@ -166,3 +166,72 @@ def test_load_skips_corrupt_lines(tmp_path):
     assert len(entries) == 2
     # avg_ms computed over the surviving entries
     assert T.summary(sd)["tools"][0]["avg_ms"] == 50
+
+
+# ── drift webhook ───────────────────────────────────────────────────────────────
+# One JSON alert POSTed the moment a tool crosses into suspect state; opt-in via
+# ANY2AGENT_ALERT_WEBHOOK; one alert per drift episode; delivery seam (_send_alert)
+# is monkeypatched so tests never touch the network.
+
+def test_webhook_fires_once_per_episode_and_rearms(tmp_path, monkeypatch):
+    sd = str(tmp_path / "s")
+    monkeypatch.setenv("ANY2AGENT_ALERT_WEBHOOK", "http://hook.local/x")
+    sent = []
+    monkeypatch.setattr(T, "_send_alert", lambda url, payload: sent.append(payload))
+
+    for _ in range(4):
+        T.record(sd, "notes_get", ok=True, status=200)
+    for _ in range(6):
+        T.record(sd, "notes_get", ok=False, status=500)   # crosses the threshold once
+    assert len(sent) == 1
+    a = sent[0]
+    assert a["tool"] == "notes_get" and a["recent_calls"] >= T.MIN_SAMPLE
+    assert a["recent_errors"] >= 3 and "eval" in a["hint"] and "ts" in a
+
+    for _ in range(3):                                     # still suspect → no re-alert
+        T.record(sd, "notes_get", ok=False, status=500)
+    assert len(sent) == 1
+
+    for _ in range(10):                                    # recover below threshold
+        T.record(sd, "notes_get", ok=True, status=200)
+    for _ in range(6):                                     # a fresh episode alerts again
+        T.record(sd, "notes_get", ok=False, status=500)
+    assert len(sent) == 2
+
+
+def test_webhook_no_env_means_no_calls_and_no_marker(tmp_path, monkeypatch):
+    sd = str(tmp_path / "s")
+    monkeypatch.delenv("ANY2AGENT_ALERT_WEBHOOK", raising=False)
+    sent = []
+    monkeypatch.setattr(T, "_send_alert", lambda url, payload: sent.append(payload))
+    for _ in range(8):
+        T.record(sd, "x", ok=False, status=500)
+    assert sent == []
+    assert not os.path.exists(os.path.join(sd, T._ALERTS_FILE))
+
+
+def test_webhook_ignores_successes_and_authz_denials(tmp_path, monkeypatch):
+    sd = str(tmp_path / "s")
+    monkeypatch.setenv("ANY2AGENT_ALERT_WEBHOOK", "http://hook.local/x")
+    sent = []
+    monkeypatch.setattr(T, "_send_alert", lambda url, payload: sent.append(payload))
+    for _ in range(10):
+        T.record(sd, "a", ok=True, status=200)               # a success can't create a suspect
+    for _ in range(10):
+        T.record(sd, "b", ok=False, status=403, authz=True)  # RBAC denial is correct, not an error
+    assert sent == []
+
+
+def test_webhook_poster_exception_is_absorbed(tmp_path, monkeypatch):
+    sd = str(tmp_path / "s")
+    monkeypatch.setenv("ANY2AGENT_ALERT_WEBHOOK", "http://hook.local/x")
+
+    def boom(url, payload):
+        raise RuntimeError("network down")
+    monkeypatch.setattr(T, "_send_alert", boom)
+
+    for _ in range(4):
+        T.record(sd, "notes_get", ok=True, status=200)
+    for _ in range(6):
+        T.record(sd, "notes_get", ok=False, status=500)      # poster blows up — must not propagate
+    assert len(T.load(sd)) == 10                              # records were still written

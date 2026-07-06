@@ -20,6 +20,7 @@ Design commitments (see docs/02-design/features/tool-composition.design.md):
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..spec import ToolSpec
@@ -159,6 +160,23 @@ def validate(spec: ToolSpec, by_name: Dict[str, ToolSpec]) -> Tuple[bool, str]:
 
 # ── executor ───────────────────────────────────────────────────────────────────
 
+def _record_step(state_dir: str, tool: str, res: Dict[str, Any], t0: float) -> None:
+    """Per-step runtime telemetry, recorded under the CONSTITUENT tool's own name.
+    Without this a composite records a single line under its own name (done by the
+    caller in core.agent), so drift detection can see that a composite is failing
+    but not which inner tool is the culprit. Guarded on state_dir — eval/verifier
+    stubs pass none, and this must never fire there. telemetry is imported lazily
+    to keep this dispatch-layer module import-light, and it is best-effort by
+    contract (record() absorbs every exception; a step never breaks on telemetry)."""
+    if not state_dir:
+        return
+    from ..evals import telemetry
+    status = res.get("status")
+    telemetry.record(state_dir, tool, ok=bool(res.get("ok")), status=status,
+                     ms=int((time.time() - t0) * 1000),
+                     authz=status in (401, 403))
+
+
 def _report(spec: ToolSpec, records: List[Dict[str, Any]], total: int,
             failed_step: Optional[int] = None, failed_tool: str = "",
             error: Optional[str] = None,
@@ -200,6 +218,10 @@ def run(spec: ToolSpec, input_args: Dict[str, Any], adapter,
     results: List[Dict[str, Any]] = []   # raw adapter results, for binding
     records: List[Dict[str, Any]] = []   # honest per-step report
     total = len(defs)
+    # per-step telemetry is recorded under each STEP's own tool name (not the
+    # composite's) so drift detection pinpoints the failing constituent. Only when
+    # the runtime passes a state_dir — eval/verifier stubs don't and must not record.
+    state_dir = ctx.get("state_dir") or ""
 
     for i, step in enumerate(defs):
         name = step.get("tool", "")
@@ -213,7 +235,9 @@ def run(spec: ToolSpec, input_args: Dict[str, Any], adapter,
         except BindingError as e:
             return _report(spec, records, total, i, target.name, "binding_error: %s" % e)
 
+        t0 = time.time()
         res = adapter.call(target, call_args if isinstance(call_args, dict) else {}, ctx)
+        _record_step(state_dir, target.name, res, t0)
         ok = bool(res.get("ok"))
         # step records deliberately omit successful intermediate `data` — that is
         # the whole point of a composite (execute server-side, return only the

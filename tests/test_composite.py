@@ -387,3 +387,50 @@ def test_composite_error_hints_not_transport(leaves):
     assert "re-run compose" in h
     h = respond.explain({**base, "error": "nested composites are not allowed"})
     assert "configuration error" in h
+
+
+# ── per-step telemetry ──────────────────────────────────────────────────────────
+# A composite records ONE line under its own name in core.agent; here each step
+# also records under the CONSTITUENT tool's name, so drift detection can point at
+# the inner tool that is failing. Guarded on ctx.state_dir (eval stubs pass none).
+
+def test_composite_records_each_step_under_its_own_name(leaves, tmp_path):
+    from any2agent.evals import telemetry as T
+    sd = str(tmp_path / "s")
+    rec = Recorder({"notes_list": {"ok": True, "status": 200, "data": [{"id": 7}]},
+                    "notes_get": {"ok": True, "status": 200, "data": {"id": 7}}})
+    comp = _composite("notes_open_first", [
+        {"tool": "notes_list", "args": {}},
+        {"tool": "notes_get", "args": {"note_id": "$steps[0].data[0].id"}},
+    ])
+    res = C.run(comp, {}, rec, ctx={"state_dir": sd}, by_name=leaves.by_name())
+    assert res["ok"]
+    entries = T.load(sd)
+    assert [e["tool"] for e in entries] == ["notes_list", "notes_get"]
+    assert all(e["ok"] is True for e in entries)
+
+
+def test_composite_without_state_dir_records_nothing(leaves, tmp_path):
+    from any2agent.evals import telemetry as T
+    sd = str(tmp_path / "s")
+    comp = _composite("c", [{"tool": "notes_list", "args": {}},
+                            {"tool": "health_get", "args": {}}])
+    C.run(comp, {}, Recorder(), ctx={}, by_name=leaves.by_name())   # eval/verifier stub ctx
+    assert T.load(sd) == []
+
+
+def test_composite_failing_step_recorded_ok_false(leaves, tmp_path):
+    from any2agent.evals import telemetry as T
+    sd = str(tmp_path / "s")
+    rec = Recorder({"notes_list": {"ok": True, "status": 200, "data": [{"id": 1}]},
+                    "notes_get": {"ok": False, "status": 500, "error": "boom"}})
+    comp = _composite("notes_open_first", [
+        {"tool": "notes_list", "args": {}},
+        {"tool": "notes_get", "args": {"note_id": "$steps[0].data[0].id"}},
+    ])
+    res = C.run(comp, {}, rec, ctx={"state_dir": sd}, by_name=leaves.by_name())
+    assert not res["ok"]
+    entries = T.load(sd)
+    assert entries[0]["tool"] == "notes_list" and entries[0]["ok"] is True
+    assert entries[1]["tool"] == "notes_get" and entries[1]["ok"] is False
+    assert entries[1]["status"] == 500

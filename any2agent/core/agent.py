@@ -157,9 +157,10 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                 msgs.append(_tool_msg(i, name, result))
                 continue
 
-            # response_format is OURS (render-time), never the backend API's —
-            # pop it before dispatch so it can't leak into query/body.
+            # response_format/fields are OURS (render-time), never the backend
+            # API's — pop them before dispatch so they can't leak into query/body.
             fmt = args.pop("response_format", None) if isinstance(args, dict) else None
+            proj = args.pop("fields", None) if isinstance(args, dict) else None
 
             t0 = time.time()
             res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False, toolset=toolset)
@@ -175,7 +176,8 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                     return
             _record_call(ctx, spec.name, res, t0)
             yield {"type": "tool", "name": name, "args": args, "result": res}
-            msgs.append(_tool_msg(i, name, res, spec=spec, toolset=toolset, response_format=fmt))
+            msgs.append(_tool_msg(i, name, res, spec=spec, toolset=toolset,
+                                  response_format=fmt, fields=proj))
         # loop continues: feed tool results back to the model
 
     yield {"type": "done", "model": rid}
@@ -188,7 +190,8 @@ def confirm_and_run(name: str, args: Dict[str, Any], toolset: ToolSet, adapter: 
     if not spec:
         return {"ok": False, "error": "unknown_tool"}
     args = dict(args or {})
-    args.pop("response_format", None)  # render-time control — never the backend's
+    args.pop("response_format", None)  # render-time controls — never the backend's
+    args.pop("fields", None)
     t0 = time.time()
     res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=True, toolset=toolset)
     _record_call(ctx, spec.name, res, t0)
@@ -207,11 +210,12 @@ def _record_call(ctx: Dict[str, Any], tool: str, res: Dict[str, Any], t0: float)
 
 
 def _tool_msg(idx: int, name: str, result: Any, spec=None, toolset=None,
-              response_format=None) -> Dict[str, Any]:
+              response_format=None, fields=None) -> Dict[str, Any]:
     """The LLM-facing tool message. respond.render guarantees valid JSON within
-    the cap (structure-aware truncation + error hints) — never a raw slice.
-    The UI event and eval trace keep the unshaped result."""
+    the cap (structure-aware truncation + error hints + field projection) —
+    never a raw slice. The UI event and eval trace keep the unshaped result."""
     from .. import respond
     content = respond.render(result if isinstance(result, dict) else {"ok": True, "data": result},
-                             spec=spec, toolset=toolset, response_format=response_format)
+                             spec=spec, toolset=toolset, response_format=response_format,
+                             fields=fields)
     return {"role": "tool", "tool_call_id": "call_%d" % idx, "name": name, "content": content}

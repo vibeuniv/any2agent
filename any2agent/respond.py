@@ -5,9 +5,12 @@ Before this layer, tool results reached the model as raw JSON with a blunt
 6000-char slice that could cut mid-structure. render() guarantees the model
 always sees VALID JSON: lists are truncated item-by-item (with an explicit
 "_meta" note steering toward filters/limit), long strings get a marker, and on
-overflow the item budget halves until it fits. Errors gain a deterministic
-`hint` telling the agent what to do next (404 on notes_get suggests notes_list
-— derived from the shaped resource_action naming, never guessed).
+overflow the item budget halves until it fits. When the truncated list's tool
+exposes a paging param, the hint names it concretely (…pass offset=10…) instead
+of the generic "refine" nudge. A render-time `fields` control projects each list
+item down to the keys the model asked for. Errors gain a deterministic `hint`
+telling the agent what to do next (404 on notes_get suggests notes_list —
+derived from the shaped resource_action naming, never guessed).
 
 Scope invariant: this shapes ONLY the message fed back to the LLM
 (core/agent._tool_msg). Adapter results, SSE events, eval traces, and grader
@@ -24,6 +27,13 @@ from .spec import ToolSpec, ToolSet
 _MODES = {"concise": 10, "detailed": 50}
 _MAX_STR = 500
 _TRUNC_MARK = "…[truncated]"
+
+# paging params we know how to steer toward. First match on the tool's schema
+# wins (this order). offset/skip are numeric (name the concrete next offset);
+# page/cursor/after are token-style (point at the response's own next token,
+# since we can't compute their next value from the item count alone).
+_PAGING_PARAMS = ("offset", "page", "cursor", "after", "skip")
+_TOKEN_STYLE = {"page", "cursor", "after"}
 
 
 # ── success-path shaping ─────────────────────────────────────────────────────
@@ -142,16 +152,95 @@ def _explain_composite(result: Dict[str, Any], toolset: Optional[ToolSet]) -> st
     return ""
 
 
+# ── success-path steering: pagination + field projection ─────────────────────
+
+def _paging_param(spec: Optional[ToolSpec]) -> str:
+    """First paging param the tool's schema exposes (deterministic, order per
+    _PAGING_PARAMS), or "" if none. Only real schema params fire — no guessing."""
+    if spec is None:
+        return ""
+    props = (spec.parameters or {}).get("properties", {})
+    for name in _PAGING_PARAMS:
+        if name in props:
+            return name
+    return ""
+
+
+def _steer_paging(notes: List[str], trunc: List[Dict[str, int]],
+                  spec: Optional[ToolSpec]) -> List[str]:
+    """When exactly one list was truncated and the tool exposes a paging param,
+    rewrite the generic "refine with filters" tail into a concrete next-page
+    instruction naming that param. No paging param -> notes unchanged."""
+    param = _paging_param(spec)
+    if not param or len(trunc) != 1:
+        return notes
+    shown = trunc[0].get("shown", 0)
+    if param in _TOKEN_STYLE:
+        tail = "refine with filters, or use the %s/next token from the response for the next page" % param
+    else:
+        tail = "refine with filters, or pass %s=%d for the next page" % (param, shown)
+    out = []
+    for n in notes:
+        if n.startswith("list truncated"):
+            out.append("%s — %s" % (n.split(" — ", 1)[0], tail))
+        else:
+            out.append(n)
+    return out
+
+
+def _project(data: Any, keys: List[str]) -> Tuple[Any, bool]:
+    """Reduce every dict item inside any list of `data` to `keys` (+ always "id"
+    when present). Non-dict items pass through untouched; unknown keys are simply
+    absent. Walks wrapper dicts down to the list; the list itself may be bare.
+    Returns (projected, touched) — touched is False when there was no list of
+    dicts to project, so the caller can skip a misleading "projected" note."""
+    keep = set(keys)
+    touched = False
+
+    def walk(v: Any) -> Any:
+        nonlocal touched
+        if isinstance(v, list):
+            out = []
+            for x in v:
+                if isinstance(x, dict):
+                    touched = True
+                    out.append({k: val for k, val in x.items() if k in keep or k == "id"})
+                else:
+                    out.append(x)
+            return out
+        if isinstance(v, dict):
+            return {k: walk(val) for k, val in v.items()}
+        return v
+
+    return walk(data), touched
+
+
 # ── the LLM message ──────────────────────────────────────────────────────────
 
 def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
            toolset: Optional[ToolSet] = None, response_format: Optional[str] = None,
-           cap: int = 6000) -> str:
+           fields: Optional[str] = None, cap: int = 6000) -> str:
     """Serialize a tool result for the model: always valid JSON, always ≤ cap.
     On overflow the list budget halves until it fits; as a last resort the data
-    is omitted with an explicit _meta note (never a mid-structure slice)."""
+    is omitted with an explicit _meta note (never a mid-structure slice).
+
+    `response_format` and `fields` are OURS (render-time controls), never backend
+    args: the agent loop pops them off the tool args before dispatch and passes
+    them here. response_format picks the trim budget; fields projects every list
+    item down to the named comma-separated keys (id always kept) for the model's
+    reading — a defensive complement to the server-side `fields` projection that
+    shape.py advertises. WIRING NOTE: agent.py._tool_msg already forwards
+    response_format; the leader must add the matching `fields` pop/forward in
+    core/agent.py (mirror the `fmt = args.pop("response_format", ...)` line) after
+    merge — until then `fields` is only reachable by direct callers/tests.
+
+    When a truncated list's tool exposes a paging param (offset/page/cursor/
+    after/skip), the truncation hint names it concretely so the model can page
+    rather than only "refine" (see _steer_paging)."""
     out = dict(result)
     mode = response_format if response_format in _MODES else "concise"
+    proj_keys = [f.strip() for f in fields.split(",")] if fields else []
+    proj_keys = [k for k in proj_keys if k]
 
     if not out.get("ok", True):
         hint = explain(out, spec, toolset)
@@ -170,6 +259,11 @@ def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
     limit = _MODES[mode]
     while True:
         shaped, notes, trunc = shape(out.get("data"), mode=mode, max_items=limit)
+        notes = _steer_paging(notes, trunc, spec)
+        if proj_keys:
+            shaped, projected = _project(shaped, proj_keys)
+            if projected:
+                notes = notes + ["items projected to fields: %s" % ", ".join(proj_keys)]
         candidate = dict(out)
         if notes:
             meta: Dict[str, Any] = {"hint": "; ".join(sorted(set(notes)))}

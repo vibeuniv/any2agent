@@ -7,6 +7,15 @@ keep failing in live use, which usually means the target API drifted and the
 toolset needs re-verification (`any2agent eval`). Suspect status is computed
 from the recent window only, so a recovered tool clears itself — no sticky
 flags. Recording must never break a conversation: every exception is absorbed.
+
+Drift webhook (opt-in): set the env var ANY2AGENT_ALERT_WEBHOOK to a URL and
+each time a tool *crosses into* suspect state one JSON alert is POSTed there
+({tool, recent_errors, recent_calls, hint, ts}). Delivery is fire-and-forget in
+a daemon thread with a 5s timeout — it never blocks or delays record(), and
+every delivery exception is absorbed. Episodes are de-duplicated via a marker
+file (<state_dir>/alerts.json): one alert per drift episode, re-armed once the
+tool recovers below the suspect threshold. No config file involved — the env var
+is the whole surface.
 """
 from __future__ import annotations
 
@@ -16,6 +25,8 @@ import time
 from typing import Any, Dict, List, Optional
 
 _FILENAME = "tool-calls.jsonl"
+_ALERTS_FILE = "alerts.json"   # per-tool drift-episode markers (webhook dedup)
+ALERT_WEBHOOK_ENV = "ANY2AGENT_ALERT_WEBHOOK"
 MAX_LINES = 5000   # rotation trigger
 KEEP = 2500        # lines kept after rotation
 WINDOW = 10        # recent calls per tool considered for drift
@@ -45,6 +56,10 @@ def record(state_dir: str, tool: str, ok: bool, status: Optional[int] = None,
         with open(p, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         _rotate(p)
+        # drift webhook: only a failing, non-authz call can push a tool into
+        # suspect state, so that is the only case worth the recent-window check.
+        if not ok and not authz:
+            _maybe_alert(state_dir, tool)
     except Exception:
         pass  # telemetry is best-effort; the conversation always wins
 
@@ -102,9 +117,94 @@ def summary(state_dir: str, window: int = WINDOW) -> Dict[str, Any]:
             "last_ts": es[-1].get("ts"),
             "recent_errors": recent_errors,
         })
-        if len(recent) >= MIN_SAMPLE and recent_errors / len(recent) >= SUSPECT_RATE:
+        if _is_suspect(recent_errors, len(recent)):
             suspects.append({
                 "tool": tool, "recent_errors": recent_errors, "recent_calls": len(recent),
-                "hint": "failing in live use — run `any2agent eval` to re-verify the toolset",
+                "hint": _SUSPECT_HINT,
             })
     return {"calls_total": len(entries), "tools": tools, "suspects": suspects}
+
+
+# ── drift webhook ──────────────────────────────────────────────────────────────
+# One JSON alert POSTed the moment a tool crosses into suspect state. Opt-in via
+# ANY2AGENT_ALERT_WEBHOOK. The whole path is best-effort and off the hot thread;
+# it can never delay, block, or raise out of record().
+
+_SUSPECT_HINT = "failing in live use — run `any2agent eval` to re-verify the toolset"
+
+
+def _is_suspect(recent_errors: int, recent_calls: int) -> bool:
+    """The single suspect rule, shared by summary() and the alert path so the
+    webhook fires on exactly the drift the /evals view would show."""
+    return recent_calls >= MIN_SAMPLE and recent_errors / recent_calls >= SUSPECT_RATE
+
+
+def _maybe_alert(state_dir: str, tool: str) -> None:
+    """Called after a failing (non-authz) call. Fires one webhook alert when
+    `tool` newly becomes a suspect, de-duplicated per drift episode via
+    <state_dir>/alerts.json. When the tool drops back below the threshold its
+    marker is cleared, so the next episode alerts again. Never raises."""
+    url = os.environ.get(ALERT_WEBHOOK_ENV)
+    if not url:
+        return
+    try:
+        rated = [e for e in load(state_dir)
+                 if e.get("tool") == tool and not e.get("authz")]
+        recent = rated[-WINDOW:]
+        recent_errors = sum(1 for e in recent if not e.get("ok"))
+        suspect = _is_suspect(recent_errors, len(recent))
+        marker = os.path.join(state_dir, _ALERTS_FILE)
+        alerts = _load_alerts(marker)
+        alerted = tool in alerts
+        if suspect and not alerted:
+            alerts[tool] = int(time.time())   # open the episode → dedups re-alerts
+            _save_alerts(marker, alerts)
+            _send_alert(url, {
+                "tool": tool,
+                "recent_errors": recent_errors,
+                "recent_calls": len(recent),
+                "hint": _SUSPECT_HINT,
+                "ts": int(time.time()),
+            })
+        elif alerted and not suspect:
+            alerts.pop(tool, None)            # episode closed → a fresh one re-alerts
+            _save_alerts(marker, alerts)
+    except Exception:
+        pass  # alerting is best-effort; it never disturbs recording
+
+
+def _load_alerts(marker: str) -> Dict[str, Any]:
+    try:
+        with open(marker, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_alerts(marker: str, alerts: Dict[str, Any]) -> None:
+    try:
+        with open(marker, "w", encoding="utf-8") as f:
+            json.dump(alerts, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _send_alert(url: str, payload: Dict[str, Any]) -> None:
+    """Delivery seam (tests monkeypatch this). Fires the POST in a daemon thread
+    so record() returns immediately and never waits on the network."""
+    import threading
+    threading.Thread(target=_deliver, args=(url, payload), daemon=True).start()
+
+
+def _deliver(url: str, payload: Dict[str, Any]) -> None:
+    """The actual one-shot POST: 5s timeout, every exception absorbed (a dead or
+    slow webhook must never surface anywhere near the conversation)."""
+    try:
+        import urllib.request
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5).close()
+    except Exception:
+        pass

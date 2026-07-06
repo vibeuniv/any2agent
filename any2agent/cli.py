@@ -87,6 +87,14 @@ def cmd_compose(args):
     run_compose(args)
 
 
+def cmd_migrate(args):
+    """Rewrite old (pre-shaping) tool-name references in curated files to the
+    current names. Aliases already keep old references working; this only
+    modernizes the files. --dry-run previews; a real run backs up before writing."""
+    from .migrate import run_migrate
+    sys.exit(run_migrate(args))
+
+
 def cmd_eval(args):
     """Task-based self-verification: run realistic tasks through the real agent
     loop against the live API and gate on the completion rate. CI-friendly:
@@ -332,6 +340,13 @@ def main(argv=None):
     sp.add_argument("--model", help="Model id for the proposal LLM (default: config/auto)")
     sp.add_argument("--dry-run", action="store_true", help="Preview candidates; never modify the toolspec")
     sp.set_defaults(func=cmd_compose)
+
+    sp = sub.add_parser("migrate", help="Rewrite old (pre-shaping) tool-name references in evals/lessons (and given files) to current names")
+    sp.add_argument("--project", help="Project name (default: current dir name)")
+    sp.add_argument("--dry-run", action="store_true", help="Preview per-file change counts; write nothing")
+    sp.add_argument("--files", metavar="a.json,b.json",
+                    help="Extra JSON files to migrate (generic: rewrite string values matching old tool names)")
+    sp.set_defaults(func=cmd_migrate)
 
     sp = sub.add_parser("eval", help="Task-based self-verification: run realistic tasks through the agent and gate on completion rate")
     sp.add_argument("--project", help="Project name (default: current dir name)")
