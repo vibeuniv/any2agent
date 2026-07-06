@@ -32,6 +32,10 @@ def grade(task: EvalTask, trace: EvalTrace, toolset: ToolSet, adapter: Optional[
         "errors": sum(1 for s in trace.steps if not s["ok"]),
         "rounds": trace.rounds,
         "called": sorted(called_set),
+        # ordered call sequence — feeds composite-tool proposal (compose.py mines
+        # frequent multi-step chains from eval history). Distinct from `called`,
+        # which is the unordered set.
+        "chain": called,
         # 4xx arg failures — the eval repair feeds these to synth_params
         "bad_calls": [{"tool": s["tool"], "status": s.get("status"),
                        "args": json.dumps(s.get("args") or {}, ensure_ascii=False)[:300]}

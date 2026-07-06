@@ -34,6 +34,14 @@ def append(state_dir: str, rep: Dict[str, Any], fixes=None) -> Dict[str, Any]:
     if fixes:
         entry["fixes"] = [{"task_id": f.get("task_id"), "class": f.get("class"),
                            "guidance": f.get("guidance")} for f in fixes]
+    # multi-step tool chains actually taken this run — the signal compose.py mines
+    # to propose composite tools. Only chains of >= 2 calls, capped, and only when
+    # present (keeps the JSONL small and old readers unaffected).
+    chains = [c for c in ((r.get("metrics") or {}).get("chain") or []
+                          for r in rep.get("results", []))
+              if isinstance(c, list) and len(c) >= 2][:20]
+    if chains:
+        entry["chains"] = chains
     os.makedirs(state_dir, exist_ok=True)
     with open(path(state_dir), "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")

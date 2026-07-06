@@ -80,7 +80,7 @@ def run_cleanup(task: EvalTask, toolset: ToolSet, adapter: Adapter,
             residue.append({"task": task.id, "tool": c.get("tool", ""), "why": "unknown_tool"})
             continue
         res = dispatch.execute(spec, c.get("args") or {}, adapter,
-                               ctx=dict(verify_ctx or {}), confirmed=True)
+                               ctx=dict(verify_ctx or {}), confirmed=True, toolset=toolset)
         if not res.get("ok"):
             residue.append({"task": task.id, "tool": spec.name,
                             "why": str(res.get("error", "failed"))[:120]})

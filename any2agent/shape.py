@@ -73,6 +73,8 @@ def _has_collection_shape(path: str) -> bool:
 
 
 def is_list_tool(t: ToolSpec) -> bool:
+    if (t.backing or {}).get("composite"):
+        return False  # composite backing has no method/path — never a collection read
     return (not t.write and not t.danger
             and _action(t.backing.get("method", "GET"), t.backing.get("path", "")) == "list")
 

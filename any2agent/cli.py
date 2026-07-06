@@ -80,6 +80,13 @@ def cmd_connect(args):
     connect(args)
 
 
+def cmd_compose(args):
+    """Propose composite (multi-step) tools and interactively approve them into the
+    toolspec. Approval is required for every candidate — there is no --yes."""
+    from .compose import run_compose
+    run_compose(args)
+
+
 def cmd_eval(args):
     """Task-based self-verification: run realistic tasks through the real agent
     loop against the live API and gate on the completion rate. CI-friendly:
@@ -318,6 +325,13 @@ def main(argv=None):
     sp.add_argument("--no-shape", action="store_true",
                     help="Skip deterministic tool shaping (resource_action names, list promotion)")
     sp.set_defaults(func=cmd_connect)
+
+    sp = sub.add_parser("compose", help="Propose composite (multi-step) tools and interactively approve them into the toolspec")
+    sp.add_argument("--project", help="Project name (default: current dir name)")
+    sp.add_argument("--n", type=int, default=6, help="Max composite candidates to propose (default 6)")
+    sp.add_argument("--model", help="Model id for the proposal LLM (default: config/auto)")
+    sp.add_argument("--dry-run", action="store_true", help="Preview candidates; never modify the toolspec")
+    sp.set_defaults(func=cmd_compose)
 
     sp = sub.add_parser("eval", help="Task-based self-verification: run realistic tasks through the agent and gate on completion rate")
     sp.add_argument("--project", help="Project name (default: current dir name)")

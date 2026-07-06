@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from .spec import ToolSet, ToolSpec
 from .adapters.base import Adapter
-from .core import registry, toolrag
+from .core import registry, toolrag, composite
 
 
 def coverage(toolset: ToolSet, routes: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -44,7 +44,15 @@ def accuracy(toolset: ToolSpec | ToolSet) -> Dict[str, Any]:
     # runtime code, or a genuinely body-less POST). Warns are reported honestly but
     # do NOT fail the gate — LLM repair fills them when a key is available.
     bad, warn = [], []
+    by_name = toolset.by_name()
     for t in toolset.tools:
+        # composite tools have a step sequence instead of a single method/path —
+        # validate their structure rather than expecting a transport backing.
+        if composite.is_composite(t):
+            ok, why = composite.validate(t, by_name)
+            if not ok:
+                bad.append({"name": t.name, "why": "composite: %s" % why})
+            continue
         props = (t.parameters or {}).get("properties") if isinstance(t.parameters, dict) else None
         if not t.backing.get("path") or not t.backing.get("method"):
             bad.append({"name": t.name, "why": "missing method/path"}); continue
@@ -71,6 +79,11 @@ def liveness(toolset: ToolSet, adapter: Adapter, sample: int = 8,
         if probed >= sample:
             break
         if t.write or t.danger:
+            continue
+        if composite.is_composite(t):
+            # multi-step; smoke-calling it via the adapter is meaningless (and could
+            # run writes). Excluded from the live probe, reported honestly.
+            results.append({"name": t.name, "status": "unprobed", "reason": "composite"})
             continue
         required = (t.parameters or {}).get("required") or []
         if required:  # can't safely synthesize required args

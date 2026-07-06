@@ -156,11 +156,11 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                 msgs.append(_tool_msg(i, name, result))
                 continue
 
-            res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False)
+            res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False, toolset=toolset)
             if res.get("confirm_required"):
                 if ctx.get("auto_confirm"):
                     # eval harness only: headless run with up-front consent (--live-write)
-                    res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=True)
+                    res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=True, toolset=toolset)
                 else:
                     yield {"type": "confirm", "name": name, "args": args, "danger": res.get("danger", False),
                            "message": res.get("message", "")}
@@ -179,7 +179,7 @@ def confirm_and_run(name: str, args: Dict[str, Any], toolset: ToolSet, adapter: 
     spec = toolset.by_name().get(name)
     if not spec:
         return {"ok": False, "error": "unknown_tool"}
-    return dispatch.execute(spec, args or {}, adapter, ctx=ctx or {}, confirmed=True)
+    return dispatch.execute(spec, args or {}, adapter, ctx=ctx or {}, confirmed=True, toolset=toolset)
 
 
 def _tool_msg(idx: int, name: str, result: Any) -> Dict[str, Any]:
