@@ -64,6 +64,9 @@ Output (all named after your project):
 
 Already have an OpenAPI spec? Skip the wizard: `any2agent init --openapi ./openapi.json --base-url https://api.yourapp.com`
 
+> Curious what happens under the hood — how routes are found, named, and turned
+> into callable tools? **[HOW-TOOLS-ARE-MADE.md](HOW-TOOLS-ARE-MADE.md)**.
+
 ---
 
 ## 3. Verify it actually works — `any2agent eval`

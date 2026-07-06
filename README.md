@@ -266,6 +266,9 @@ carry an actionable hint (a 404 suggests the sibling `*_list` tool).
 The loop stops when **all checks pass**, or at a budget/no-progress limit — and
 then prints exactly what's still unverified (it never silently claims success).
 
+Deep dives, in plain language: **[how your API becomes agent tools](docs/HOW-TOOLS-ARE-MADE.md)**
+(scan → shape → auth → runtime) and **[how self-verification works](docs/HOW-EVAL-WORKS.md)**.
+
 ---
 
 ## FAQ / Troubleshooting
