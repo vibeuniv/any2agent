@@ -53,8 +53,12 @@ def _json_obj(txt: str):
         return None
 
 
-def enrich(tools: List[ToolSpec], model_id: str | None = None, force: bool = False) -> List[ToolSpec]:
-    """Rewrite terse (or, with force, all) descriptions into 'when to call this'."""
+def enrich(tools: List[ToolSpec], model_id: str | None = None, force: bool = False,
+           context: str = "") -> List[ToolSpec]:
+    """Rewrite terse (or, with force, all) descriptions into 'when to call this'.
+    `context` carries evidence of a selection failure (e.g. the eval task the
+    model failed and what it picked instead) so the rewrite targets the actual
+    confusion, not just brevity."""
     entry, model_string, _ = registry.resolve(model_id)
     if not entry:
         return tools
@@ -65,9 +69,10 @@ def enrich(tools: List[ToolSpec], model_id: str | None = None, force: bool = Fal
                    "Rewrite this API operation as ONE concise sentence describing WHEN an "
                    "assistant should call it (user intent + key inputs), for an LLM tool selector. "
                    "Be prescriptive about the trigger, not just what it does. No fluff.\n"
-                   "name: %s\nmethod/path: %s %s\ncurrent: %s\nparams: %s"
+                   "name: %s\nmethod/path: %s %s\ncurrent: %s\nparams: %s%s"
                    % (t.name, t.backing.get("method", ""), t.backing.get("path", ""),
-                      t.description, list((t.parameters or {}).get("properties", {}).keys())))
+                      t.description, list((t.parameters or {}).get("properties", {}).keys()),
+                      ("\nselection failure to fix: " + context[:500]) if context else ""))
         if out:
             t.description = out[:600]
     return tools

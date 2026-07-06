@@ -317,6 +317,13 @@ def connect(args) -> None:
             print("[connect] ⚠ nothing left to auto-fix — stopping with an honest report")
             break
 
+    # ---- task-based eval (opt-in final gate; repairs feed back into the toolset) ----
+    if getattr(args, "eval_gate", False):
+        if live and adapter is not None:
+            _eval_gate(toolset, adapter, args, verify_ctx, project)
+        else:
+            print("[connect] eval gate skipped (needs live target + provider key)")
+
     # ---- write artifacts (project-named) ----
     cfg = AgentConfig(project=project, base_url=base_url, auth=auth,
                       default_model_id=getattr(args, "default_model", None) or "")
@@ -340,6 +347,95 @@ def connect(args) -> None:
         _print_embed(cfg)
     else:
         print("[connect] later:  any2agent serve --project %s" % project)
+
+
+def _eval_gate(toolset: ToolSet, adapter, args, verify_ctx: Dict[str, Any],
+               project: str) -> None:
+    """Final gate: run the task eval once; on failure apply one eval-driven
+    repair pass (description rewrites with failure context, param synthesis
+    from 4xx calls) and re-run once. Far costlier than the static critics, so
+    it runs after the main loop, not inside it. Read tasks only — write tasks
+    need `any2agent eval --live-write` run explicitly."""
+    from .evals import budget as eval_budget
+    from .evals import tasks as eval_tasks
+    eval_budget.reset(40)
+    model_id = getattr(args, "default_model", None)
+    tasks, invalid = eval_tasks.load_or_generate(toolset, project + ".evals.json",
+                                                 model_id=model_id)
+    if invalid:
+        print("[connect] eval: %d invalid task(s) excluded" % len(invalid))
+    if not tasks:
+        print("[connect] eval: no runnable tasks — skipping gate")
+        return
+    rep = None
+    for attempt in (1, 2):
+        print("\n[connect] task eval %d/2  (tasks=%d, read-only)" % (attempt, len(tasks)))
+        rep = V.task_eval(toolset, adapter, tasks, model_id=model_id,
+                          threshold=V.THRESHOLDS["task_eval_rate"],
+                          write_ok=False, verify_ctx=verify_ctx)
+        if rep.get("skipped"):
+            print("  [SKIP] task_eval (%s)" % rep["skipped"])
+            return
+        print("  [%s] task_eval rate=%.2f rated=%d failed=%s"
+              % ("PASS" if rep["passed"] else "FAIL", rep["rate"], rep["rated"],
+                 ",".join(rep["failed"]) or "-"))
+        if rep["passed"] or attempt == 2:
+            if not rep["passed"]:
+                print("  residual: tasks the agent could not complete — see `any2agent eval` for detail")
+            break
+        n = _eval_repair(toolset, rep, {t.id: t for t in tasks})
+        print("  eval repair: %d change(s)" % n)
+        if n == 0:
+            break
+
+    # record history + lessons (same trail as `any2agent eval`)
+    from .evals import history as eval_history
+    from .evals import lessons as eval_lessons
+    cfg_paths = AgentConfig(project=project)
+    by_id = {t.id: t for t in tasks}
+    built = eval_lessons.build(rep, by_id)
+    eval_history.append(cfg_paths.state_dir(), rep, fixes=built)
+    passed_ids = [r["task_id"] for r in rep["results"] if r["success"]]
+    kept = eval_lessons.merge_save(cfg_paths.lessons_path(), project, built, passed_ids, toolset)
+    if kept or built:
+        print("  lessons -> %s (%d active)" % (cfg_paths.lessons_path(), len(kept)))
+
+
+def _eval_repair(toolset: ToolSet, rep: Dict[str, Any], tasks_by_id: Dict[str, Any]) -> int:
+    """Map eval failures onto the existing repair channels: wrong-tool failures
+    rewrite the expected tools' descriptions WITH the failure as context; 4xx
+    arg failures re-run param synthesis with the failing call as the hint.
+    Judge/other failures aren't auto-fixable — reported honestly, not touched."""
+    if not registry.llm_available():
+        return 0
+    try:
+        from . import llm_repair as describe
+    except Exception:
+        return 0
+    changes = 0
+    by_name = toolset.by_name()
+    for r in rep["results"]:
+        if r["success"] or r["ungraded"]:
+            continue
+        task = tasks_by_id.get(r["task_id"])
+        if task is None:
+            continue
+        wrong = any(x.startswith(("expected tools not covered", "attempted write tool"))
+                    for x in r["reasons"])
+        if wrong and describe.budget_left() > 0:
+            targets = [by_name[n] for path in task.expected_tools for n in path if n in by_name]
+            if targets:
+                describe.enrich(targets, force=True,
+                                context="user task %r — the model called %s instead"
+                                        % (task.prompt[:200], r["metrics"].get("called")))
+                changes += len(targets)
+        for bc in r["metrics"].get("bad_calls", []):
+            t = by_name.get(bc["tool"])
+            if t and describe.budget_left() > 0:
+                if describe.synth_params(t, source_hint="a live call failed with HTTP %s using args %s — "
+                                                        "infer the correct parameters" % (bc["status"], bc["args"])):
+                    changes += 1
+    return changes
 
 
 def _gap_signature(rep: Dict[str, Any]) -> str:

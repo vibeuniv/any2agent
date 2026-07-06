@@ -25,6 +25,16 @@ def _tools_payload(seed, mem_on: bool = False):
     return out
 
 
+def _inject_lessons(msgs, lessons):
+    """Prepend eval-derived guidance (see evals/lessons.py). Hints for tool
+    selection only — the confirm/auth gates never read this."""
+    if not lessons:
+        return msgs
+    from ..evals import lessons as _lessons  # lazy: keeps core import-light
+    blob = _lessons.render([{"guidance": str(l)} for l in lessons])
+    return [{"role": "system", "content": blob}] + msgs
+
+
 def _inject_memory(msgs, state_dir: str, owner: str):
     """Prepend a system note with the user's relevant remembered facts (scored by
     the latest user message). No-op when nothing is remembered."""
@@ -68,6 +78,7 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
     mem_on = bool(ctx.get("memory_enabled")) and bool(state_dir)
     if mem_on:
         msgs = _inject_memory(msgs, state_dir, owner)
+    msgs = _inject_lessons(msgs, ctx.get("lessons"))
 
     for _ in range(MAX_STEPS):
         seed = toolrag.build_seed(all_tools, discovered)
@@ -147,11 +158,15 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
 
             res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False)
             if res.get("confirm_required"):
-                yield {"type": "confirm", "name": name, "args": args, "danger": res.get("danger", False),
-                       "message": res.get("message", "")}
-                # stop the turn; client confirms then calls /confirm
-                yield {"type": "done", "model": rid}
-                return
+                if ctx.get("auto_confirm"):
+                    # eval harness only: headless run with up-front consent (--live-write)
+                    res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=True)
+                else:
+                    yield {"type": "confirm", "name": name, "args": args, "danger": res.get("danger", False),
+                           "message": res.get("message", "")}
+                    # stop the turn; client confirms then calls /confirm
+                    yield {"type": "done", "model": rid}
+                    return
             yield {"type": "tool", "name": name, "args": args, "result": res}
             msgs.append(_tool_msg(i, name, res))
         # loop continues: feed tool results back to the model

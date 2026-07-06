@@ -49,6 +49,12 @@ class AgentConfig:
     def config_path(self) -> str:
         return f"{self.project}.any2agent.toml"
 
+    def evals_path(self) -> str:
+        return f"{self.project}.evals.json"
+
+    def lessons_path(self) -> str:
+        return f"{self.project}.eval-lessons.json"
+
     def state_dir(self) -> str:
         return os.path.join(".any2agent-state", self.project)
 

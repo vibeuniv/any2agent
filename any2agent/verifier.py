@@ -7,6 +7,9 @@ what was/wasn't verified (no silent "done").
   liveness  : read tools actually return 2xx against the live target (needs base_url
               + consent; write/danger are never auto-called)
   agent_e2e : the LLM selects a plausible tool for representative probes (needs key)
+  task_eval : the agent COMPLETES realistic multi-step tasks end-to-end against the
+              live target, graded by deterministic checks + advisory LLM judge
+              (needs base_url + key; write tasks only with explicit consent)
 """
 from __future__ import annotations
 
@@ -131,19 +134,83 @@ def agent_e2e(toolset: ToolSet, probes: List[str], model_id: Optional[str] = Non
             "missed": [c["probe"] for c in rated if not c["ok"]]}
 
 
+def task_eval(toolset: ToolSet, adapter: Optional[Adapter], tasks,
+              model_id: Optional[str] = None, threshold: float = 0.8,
+              write_ok: bool = False,
+              verify_ctx: Optional[Dict[str, Any]] = None,
+              judge_model: Optional[str] = None) -> Dict[str, Any]:
+    """Run EvalTasks through the real agent loop and grade completion. Skipped
+    (passed=None, non-gating) without adapter/key/tasks — same convention as
+    agent_e2e. Infra failures (LLM errors, budget) are separated out so they
+    don't masquerade as agent failures; ungraded tasks leave the denominator."""
+    if adapter is None:
+        return {"name": "task_eval", "passed": None, "skipped": "no base_url", "results": []}
+    if not registry.llm_available():
+        return {"name": "task_eval", "passed": None, "skipped": "no provider key", "results": []}
+    if not tasks:
+        return {"name": "task_eval", "passed": None, "skipped": "no tasks", "results": []}
+
+    from .evals import runner as _runner, grader as _grader
+
+    results, residue = [], []
+    skipped_write = skipped_budget = infra = ungraded = 0
+    for task in tasks:
+        if task.kind == "write" and not write_ok:
+            skipped_write += 1
+            continue
+        trace = _runner.run_task(task, toolset, adapter, model_id=model_id,
+                                 verify_ctx=verify_ctx, write_ok=write_ok)
+        res = _grader.grade(task, trace, toolset, adapter, model_id=model_id,
+                            verify_ctx=verify_ctx, judge_model=judge_model)
+        if task.kind == "write":
+            residue.extend(_runner.run_cleanup(task, toolset, adapter, verify_ctx=verify_ctx))
+        # distinct buckets so CI can tell "out of budget" from "infra broke"
+        if trace.error == "skipped_budget":
+            skipped_budget += 1
+        elif trace.error:
+            infra += 1
+        elif res.ungraded:
+            ungraded += 1
+        results.append(res)
+
+    # rate denominator: graded tasks whose failure (if any) is the agent's, not infra's
+    rated = [r for r in results
+             if not r.ungraded and not any(x.startswith("runner:") for x in r.reasons)]
+    rate = (sum(1 for r in rated if r.success) / len(rated)) if rated else 0.0
+    passed = bool(rated) and rate >= threshold and not residue
+    agg = {
+        "avg_tool_calls": round(sum(r.metrics.get("tool_calls", 0) for r in rated) / len(rated), 2) if rated else 0,
+        "wrong_tool_calls": sum(r.metrics.get("wrong_tool_calls", 0) for r in rated),
+        "tool_errors": sum(r.metrics.get("errors", 0) for r in rated),
+    }
+    return {"name": "task_eval", "passed": passed, "rate": round(rate, 3),
+            "threshold": threshold, "rated": len(rated),
+            "results": [r.to_dict() for r in results],
+            "skipped_write": skipped_write, "skipped_budget": skipped_budget,
+            "infra_errors": infra,
+            "ungraded": ungraded, "residue": residue, "metrics": agg,
+            "failed": [r.task_id for r in rated if not r.success]}
+
+
 # ── CTO exit-threshold defaults (decisive criteria) ──
-THRESHOLDS = {"coverage_pct": 1.0, "accuracy_bad": 0, "liveness_fail": 0, "e2e_rate": 0.9}
+THRESHOLDS = {"coverage_pct": 1.0, "accuracy_bad": 0, "liveness_fail": 0,
+              "e2e_rate": 0.9, "task_eval_rate": 0.8}
 
 
 def run_all(toolset: ToolSet, routes, adapter: Optional[Adapter], probes,
             live: bool, model_id: Optional[str] = None,
             verify_ctx: Optional[Dict[str, Any]] = None,
-            thresholds: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+            thresholds: Optional[Dict[str, Any]] = None,
+            eval_tasks=None, eval_write_ok: bool = False) -> Dict[str, Any]:
     th = {**THRESHOLDS, **(thresholds or {})}
     reports = [coverage(toolset, routes), accuracy(toolset)]
     if live and adapter is not None:
         reports.append(liveness(toolset, adapter, ctx=verify_ctx))
         reports.append(agent_e2e(toolset, probes, model_id, threshold=th["e2e_rate"]))
+        if eval_tasks is not None:
+            reports.append(task_eval(toolset, adapter, eval_tasks, model_id=model_id,
+                                     threshold=th["task_eval_rate"],
+                                     write_ok=eval_write_ok, verify_ctx=verify_ctx))
     # passed=None (skipped) does not fail the gate
     gate = all(r.get("passed") in (True, None) for r in reports)
     return {"passed": gate, "reports": reports, "thresholds": th}

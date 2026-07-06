@@ -33,6 +33,7 @@ dependencies = [
 embeddings = ["openai"]
 # Load keys from a local .env (optional; shell env works without it).
 dotenv = ["python-dotenv"]
+dev = ["pytest"]
 
 [project.scripts]
 any2agent = "any2agent.cli:main"
@@ -47,3 +48,6 @@ include = ["any2agent*"]
 
 [tool.setuptools.package-data]
 "any2agent.server" = ["web/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
