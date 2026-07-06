@@ -125,10 +125,15 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
         if not entries and not lessons:
             return {"evaluated": False, "project": cfg.project}
         tasks_total = 0
+        task_prompts = {}
         try:
             if os.path.exists(cfg.evals_path()):
                 with open(cfg.evals_path(), encoding="utf-8") as f:
-                    tasks_total = len((json.load(f) or {}).get("tasks", []))
+                    _tasks = (json.load(f) or {}).get("tasks", [])
+                tasks_total = len(_tasks)
+                # id -> prompt so the console can show WHAT failed in the
+                # user's own words, not an opaque task id
+                task_prompts = {t.get("id"): t.get("prompt", "") for t in _tasks if t.get("id")}
         except Exception:
             pass
         return {
@@ -140,6 +145,7 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
             "lessons": [{"task_id": l.get("task_id"), "class": l.get("class"),
                          "guidance": l.get("guidance")} for l in lessons],
             "tasks_total": tasks_total,
+            "task_prompts": task_prompts,
         }
 
     @app.get("/evals/ui", response_class=HTMLResponse)

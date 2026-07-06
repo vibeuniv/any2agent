@@ -9,12 +9,14 @@
   :root{
     --ink:#0f1419; --mut:#5b6470; --line:#e6e8eb; --bg:#fbfcfd; --card:#fff;
     --user:#eef4ff; --accent:#2f6df6; --ok:#16a34a; --bad:#dc2626; --warn:#b45309;
+    --ok-soft:rgba(22,163,74,.10); --bad-soft:rgba(220,38,38,.10);
     --g1:#2f6df6; --g2:#7c5cff; --g3:#e0529c;
     --shadow:0 1px 2px rgba(16,20,30,.06),0 8px 24px rgba(16,20,30,.06);
   }
   @media (prefers-color-scheme: dark){
     :root{--ink:#e7eaee;--mut:#9aa3af;--line:#262b33;--bg:#0d1117;--card:#161b22;
-          --user:#1b2435;--shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);}
+          --user:#1b2435;--ok-soft:rgba(22,163,74,.16);--bad-soft:rgba(220,38,38,.16);
+          --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);}
   }
   *{box-sizing:border-box}
   body{margin:0;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Apple SD Gothic Neo",sans-serif;
@@ -27,28 +29,61 @@
   .brand .sub{font-size:11.5px;color:var(--mut)}
   .spacer{flex:1}
   a.back{font-size:12.5px;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:5px 11px}
-  main{max-width:780px;margin:0 auto;padding:26px 20px 60px}
+  main{max-width:820px;margin:0 auto;padding:26px 20px 60px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin:14px 0}
   h2{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:0 0 12px}
-  .status{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .rate{font-size:34px;font-weight:800}
-  .rate.ok{color:var(--ok)} .rate.bad{color:var(--bad)}
-  .trend{color:var(--mut);font-size:13px}
-  .pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 10px}
-  .pill.ok{background:rgba(22,163,74,.12);color:var(--ok)}
-  .pill.bad{background:rgba(220,38,38,.12);color:var(--bad)}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th{color:var(--mut);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-  td{padding:7px 8px;border-bottom:1px solid var(--line)}
-  tr:last-child td{border-bottom:0}
-  .cls{font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 7px;background:var(--user);color:var(--accent);white-space:nowrap}
-  .fix{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
-  .fix:last-child{border-bottom:0}
-  .fix .tid{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);white-space:nowrap}
+
+  /* hero verdict */
+  .hero{display:flex;gap:16px;align-items:flex-start;padding:22px 20px}
+  .hero.ok{border-left:4px solid var(--ok)} .hero.bad{border-left:4px solid var(--bad)}
+  .hero .icon{font-size:30px;line-height:1}
+  .hero .verdict{font-size:19px;font-weight:800;margin:0 0 4px}
+  .hero .plain{color:var(--mut);font-size:14px;margin:0}
+
+  /* KPI row */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px}
+  .kpi .v{font-size:26px;font-weight:800;line-height:1.2}
+  .kpi .v .delta{font-size:13px;font-weight:700;margin-left:6px}
+  .kpi .v .delta.up{color:var(--ok)} .kpi .v .delta.down{color:var(--bad)}
+  .kpi .l{font-size:12px;color:var(--mut);margin-top:2px}
+
+  /* run-history column chart */
+  .chart{display:flex;align-items:flex-end;gap:10px;height:150px;padding:8px 4px 0}
+  .col{flex:1;max-width:64px;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;position:relative}
+  .col .bar{width:100%;border-radius:4px 4px 0 0;min-height:4px;transition:.12s;cursor:default}
+  .col .bar.ok{background:var(--ok)} .col .bar.bad{background:var(--bad)}
+  .col:hover .bar{filter:brightness(1.12)}
+  .col .mark{font-size:11px;font-weight:800}
+  .col .mark.ok{color:var(--ok)} .col .mark.bad{color:var(--bad)}
+  .col .when{font-size:10px;color:var(--mut);white-space:nowrap}
+  .col .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+            background:var(--ink);color:var(--bg);font-size:11.5px;border-radius:8px;padding:6px 10px;
+            white-space:nowrap;z-index:5;box-shadow:var(--shadow)}
+  .col:hover .tip{display:block}
+  .axis{border-top:1px solid var(--line);margin-top:2px}
+  .legend{display:flex;gap:14px;font-size:11.5px;color:var(--mut);margin-top:10px}
+  .legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* failure cards */
+  .fail{border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:10px;padding:12px 14px;margin:10px 0;background:var(--bad-soft)}
+  .fail .req{font-weight:700;margin:0 0 4px}
+  .fail .req q{quotes:"“" "”"}
+  .fail .cause{font-size:13.5px;margin:0 0 6px}
+  .fail .action{font-size:13px;color:var(--mut);margin:0}
+  .fail .action b{color:var(--ink)}
+
+  .lesson{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  .lesson:last-child{border-bottom:0}
+  .lesson .n{color:var(--mut);font-size:12px}
   .note{color:var(--mut);font-size:12px;margin-top:10px}
+  details{margin-top:12px}
+  summary{font-size:12.5px;color:var(--mut);cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  th{color:var(--mut);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:6px 8px;border-bottom:1px solid var(--line)} tr:last-child td{border-bottom:0}
   .empty{text-align:center;color:var(--mut);padding:60px 0}
   .empty code{background:var(--user);border-radius:6px;padding:2px 8px}
-  svg.spark{display:block;margin-top:6px}
 </style>
 </head>
 <body>
@@ -63,51 +98,108 @@
 <script>
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtTs = ts => new Date(ts * 1000).toLocaleString();
+const fmtDay = ts => new Date(ts * 1000).toLocaleDateString(undefined, {month:'numeric', day:'numeric'});
+const ago = ts => {
+  const m = Math.round((Date.now()/1000 - ts) / 60);
+  if (m < 2) return 'just now';
+  if (m < 60) return m + ' min ago';
+  const h = Math.round(m/60);
+  if (h < 48) return h + ' hr ago';
+  return Math.round(h/24) + ' days ago';
+};
 
-function spark(hist){
-  if (hist.length < 2) return '';
-  const w = 220, h = 36, xs = hist.map((e, i) => i / (hist.length - 1) * (w - 4) + 2);
-  const ys = hist.map(e => h - 3 - (e.rate || 0) * (h - 6));
-  const pts = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(' ');
-  const last = hist[hist.length - 1];
-  return `<svg class="spark" width="${w}" height="${h}" aria-label="rate trend">
-    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
-    <circle cx="${xs[xs.length-1]}" cy="${ys[ys.length-1]}" r="3" fill="${last.passed ? 'var(--ok)' : 'var(--bad)'}"/></svg>`;
-}
+// failure classes → plain language (what happened + what to do)
+const CAUSE = {
+  wrong_tool:    { what: 'The agent picked the wrong tool for this request.',
+                   act:  'Its tool descriptions were updated to steer it right — re-run the check to confirm.' },
+  bad_args:      { what: 'The agent called a tool with inputs the API rejected.',
+                   act:  'The tool’s parameter schema needs fixing — try `eval --fix`.' },
+  tool_error:    { what: 'The API call itself failed while handling this.',
+                   act:  'Check that the target API is up and the session is valid, then re-run.' },
+  state_mismatch:{ what: 'The agent said it was done, but the expected result was not found afterwards.',
+                   act:  'Inspect the tool’s write behavior — the action may not actually apply.' },
+  answer_gap:    { what: 'The final answer didn’t contain what was asked for.',
+                   act:  'Review the answer against the tool results — it may be ignoring data it fetched.' },
+  other:         { what: 'This failed for an unclassified reason.',
+                   act:  'See the full report (`eval --json`) for details.' },
+};
 
 fetch('/evals').then(r => r.json()).then(d => {
   const m = document.getElementById('main');
   if (!d.evaluated){
-    m.innerHTML = `<div class="empty"><p>Not evaluated yet.</p>
-      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> then refresh.</p></div>`;
+    m.innerHTML = `<div class="empty"><p><b>This agent hasn’t been checked yet.</b></p>
+      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> to test it with real tasks, then refresh.</p></div>`;
     return;
   }
-  const L = d.latest, ok = L.passed;
-  let html = `<div class="card"><h2>Status</h2><div class="status">
-      <span class="rate ${ok?'ok':'bad'}">${(L.rate ?? 0).toFixed(2)}</span>
-      <span class="pill ${ok?'ok':'bad'}">${ok?'GATE PASSED':'BELOW THRESHOLD'}</span>
-      <span class="trend">${esc(d.trend)} · ${d.tasks_total} task(s) · last run ${fmtTs(L.ts)}</span>
-    </div>${spark(d.history)}</div>`;
+  const L = d.latest, ok = L.passed, hist = d.history || [];
+  const prompts = d.task_prompts || {};
+  const passedN = Math.round((L.rate || 0) * L.rated);
+  const prev = hist.length > 1 ? hist[hist.length - 2] : null;
+  const delta = prev ? (L.rate - prev.rate) : null;
 
+  // ── hero verdict: one plain sentence anyone can read ──
+  let html = `<div class="card hero ${ok?'ok':'bad'}">
+    <div class="icon">${ok ? '✅' : '⚠️'}</div>
+    <div>
+      <p class="verdict">${ok ? 'Working well' : 'Needs attention'}</p>
+      <p class="plain">In the latest check, this agent completed <b>${passedN} of ${L.rated}</b> test task(s)${
+        ok ? '.' : ` — <b>${(L.failed||[]).length} failed</b> (details below).`}
+        Last checked ${ago(L.ts)}.</p>
+    </div></div>`;
+
+  // ── KPI row ──
+  const deltaHtml = delta === null ? '' :
+    `<span class="delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '▲' : '▼'}${Math.abs(delta*100).toFixed(0)}%</span>`;
+  html += `<div class="kpis">
+    <div class="kpi"><div class="v">${Math.round((L.rate||0)*100)}%${deltaHtml}</div><div class="l">tasks completed (vs previous check)</div></div>
+    <div class="kpi"><div class="v">${hist.length}</div><div class="l">checks recorded</div></div>
+    <div class="kpi"><div class="v">${(d.lessons||[]).length}</div><div class="l">lessons guiding the agent now</div></div>
+    <div class="kpi"><div class="v">${d.tasks_total}</div><div class="l">test tasks in the suite</div></div>
+  </div>`;
+
+  // ── run history: column chart (height = completion, status color + ✓/✗ label) ──
+  const PLOT_H = 104; // fixed plot height in px so bar length encodes the value truthfully
+  const cols = hist.slice(-12).map(e => {
+    const pct = Math.round((e.rate||0)*100);
+    return `<div class="col">
+      <div class="tip">${fmtTs(e.ts)} — completed ${pct}%${(e.failed||[]).length ? ' · failed: ' + esc(e.failed.join(', ')) : ''}</div>
+      <span class="mark ${e.passed?'ok':'bad'}">${e.passed?'✓':'✗'}</span>
+      <div class="bar ${e.passed?'ok':'bad'}" style="height:${Math.max(4, Math.round(pct * PLOT_H / 100))}px"></div>
+      <span class="when">${fmtDay(e.ts)}</span>
+    </div>`;
+  }).join('');
+  html += `<div class="card"><h2>Check history — taller is better</h2>
+    <div class="chart">${cols}</div><div class="axis"></div>
+    <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>✓ passed the quality gate</span>
+    <span><span class="sw" style="background:var(--bad)"></span>✗ below the gate</span></div>
+    <details><summary>view as table</summary><table><thead>
+      <tr><th>when</th><th>completed</th><th>result</th><th>failed tasks</th></tr></thead><tbody>${
+      hist.slice().reverse().map(e =>
+        `<tr><td>${fmtTs(e.ts)}</td><td>${Math.round((e.rate||0)*100)}%</td>
+         <td>${e.passed?'✓ pass':'✗ fail'}</td><td>${esc((e.failed||[]).join(', ') || '—')}</td></tr>`).join('')
+    }</tbody></table></details></div>`;
+
+  // ── failures: lead with the REQUEST, then plain cause, then the action ──
   const fixes = L.fixes || [];
   if (fixes.length){
-    html += `<div class="card"><h2>What to fix</h2>` + fixes.map(f =>
-      `<div class="fix"><span class="tid">${esc(f.task_id)}</span><span class="cls">${esc(f.class)}</span>
-       <span>${esc(f.guidance)}</span></div>`).join('') + `</div>`;
+    html += `<div class="card"><h2>What went wrong — and what happens next</h2>` + fixes.map(f => {
+      const c = CAUSE[f.class] || CAUSE.other;
+      const req = prompts[f.task_id];
+      return `<div class="fail">
+        ${req ? `<p class="req">When asked: <q>${esc(req)}</q></p>` : `<p class="req">Task ${esc(f.task_id)}</p>`}
+        <p class="cause">${esc(c.what)}</p>
+        <p class="action"><b>Next:</b> ${esc(c.act)}</p>
+      </div>`;
+    }).join('') + `</div>`;
   }
 
-  html += `<div class="card"><h2>History</h2><table><thead>
-      <tr><th>when</th><th>rate</th><th>rated</th><th>gate</th><th>failed</th></tr></thead><tbody>` +
-    d.history.slice().reverse().map(e =>
-      `<tr><td>${fmtTs(e.ts)}</td><td>${(e.rate ?? 0).toFixed(2)}</td><td>${e.rated}</td>
-       <td><span class="pill ${e.passed?'ok':'bad'}">${e.passed?'PASS':'FAIL'}</span></td>
-       <td>${esc((e.failed || []).join(', ') || '—')}</td></tr>`).join('') +
-    `</tbody></table></div>`;
-
-  if (d.lessons.length){
-    html += `<div class="card"><h2>Active lessons</h2>` + d.lessons.map(l =>
-      `<div class="fix"><span class="cls">${esc(l.class)}</span><span>${esc(l.guidance)}</span></div>`).join('') +
-      `<p class="note">These lines are injected as guidance into every chat turn until the task passes.</p></div>`;
+  // ── lessons in plain terms ──
+  if ((d.lessons||[]).length){
+    html += `<div class="card"><h2>What the agent has learned</h2>
+      <p class="note" style="margin:0 0 8px">From past failures, these corrections are whispered to the agent
+      on every conversation — each disappears automatically once its task passes a check.</p>` +
+      d.lessons.map((l, i) => `<div class="lesson"><span class="n">${i+1}.</span><span>${esc(l.guidance)}</span></div>`).join('') +
+      `</div>`;
   }
   m.innerHTML = html;
 }).catch(() => {
