@@ -193,6 +193,26 @@ fetch('/evals').then(r => r.json()).then(d => {
     }).join('') + `</div>`;
   }
 
+  // ── live usage (runtime telemetry) ──
+  const rt = d.runtime || {calls_total: 0};
+  if (rt.calls_total > 0){
+    const sus = rt.suspects || [];
+    html += `<div class="card"><h2>Live usage — real conversations, not test runs</h2>` +
+      sus.map(s => `<div class="fail">
+        <p class="req">⚠ <code>${esc(s.tool)}</code> keeps failing in live use
+          (${s.recent_errors} of its last ${s.recent_calls} calls)</p>
+        <p class="action"><b>Next:</b> the API behind it may have changed — run
+          <code>any2agent eval --project ${esc(d.project)}</code> to re-verify.</p>
+      </div>`).join('') +
+      `<table><thead><tr><th>tool</th><th>calls</th><th>failures</th><th>avg speed</th><th>last used</th></tr></thead><tbody>` +
+      (rt.tools || []).map(t =>
+        `<tr><td><code>${esc(t.tool)}</code></td><td>${t.calls}</td>
+         <td>${t.errors ? t.errors + ' (' + Math.round(t.error_rate*100) + '%)' : '—'}</td>
+         <td>${t.avg_ms != null ? t.avg_ms + ' ms' : '—'}</td><td>${ago(t.last_ts)}</td></tr>`).join('') +
+      `</tbody></table>
+      <p class="note">${rt.calls_total} call(s) recorded. Only tool names and outcomes are logged — never arguments, responses, or user identity.</p></div>`;
+  }
+
   // ── lessons in plain terms ──
   if ((d.lessons||[]).length){
     html += `<div class="card"><h2>What the agent has learned</h2>

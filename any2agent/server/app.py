@@ -120,9 +120,11 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
         # re-read files on every request: an eval run after server start must
         # show up without a restart (no boot-time caching)
         from ..evals import history as eval_history
+        from ..evals import telemetry as eval_telemetry
         entries = eval_history.load(cfg.state_dir(), n=20)
         lessons = eval_lessons.load(cfg.lessons_path())
-        if not entries and not lessons:
+        runtime = eval_telemetry.summary(cfg.state_dir())
+        if not entries and not lessons and not runtime["calls_total"]:
             return {"evaluated": False, "project": cfg.project}
         tasks_total = 0
         task_prompts = {}
@@ -146,6 +148,7 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
                          "guidance": l.get("guidance")} for l in lessons],
             "tasks_total": tasks_total,
             "task_prompts": task_prompts,
+            "runtime": runtime,
         }
 
     @app.get("/evals/ui", response_class=HTMLResponse)

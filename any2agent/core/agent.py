@@ -8,6 +8,7 @@ events as plain dicts the server turns into SSE:
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..spec import ToolSet
@@ -160,6 +161,7 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
             # pop it before dispatch so it can't leak into query/body.
             fmt = args.pop("response_format", None) if isinstance(args, dict) else None
 
+            t0 = time.time()
             res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=False, toolset=toolset)
             if res.get("confirm_required"):
                 if ctx.get("auto_confirm"):
@@ -171,6 +173,7 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
                     # stop the turn; client confirms then calls /confirm
                     yield {"type": "done", "model": rid}
                     return
+            _record_call(ctx, spec.name, res, t0)
             yield {"type": "tool", "name": name, "args": args, "result": res}
             msgs.append(_tool_msg(i, name, res, spec=spec, toolset=toolset, response_format=fmt))
         # loop continues: feed tool results back to the model
@@ -180,12 +183,27 @@ def run_chat(messages: List[Dict[str, Any]], toolset: ToolSet, adapter: Adapter,
 
 def confirm_and_run(name: str, args: Dict[str, Any], toolset: ToolSet, adapter: Adapter,
                     ctx: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    ctx = ctx or {}
     spec = toolset.by_name().get(name)
     if not spec:
         return {"ok": False, "error": "unknown_tool"}
     args = dict(args or {})
     args.pop("response_format", None)  # render-time control — never the backend's
-    return dispatch.execute(spec, args, adapter, ctx=ctx or {}, confirmed=True, toolset=toolset)
+    t0 = time.time()
+    res = dispatch.execute(spec, args, adapter, ctx=ctx, confirmed=True, toolset=toolset)
+    _record_call(ctx, spec.name, res, t0)
+    return res
+
+
+def _record_call(ctx: Dict[str, Any], tool: str, res: Dict[str, Any], t0: float) -> None:
+    """Runtime telemetry: executed calls only (never confirm_required), name +
+    outcome + latency — no args/bodies/identity. Best-effort by contract."""
+    from ..evals import telemetry
+    status = res.get("status")
+    telemetry.record(ctx.get("state_dir") or "", tool,
+                     ok=bool(res.get("ok")), status=status,
+                     ms=int((time.time() - t0) * 1000),
+                     authz=status in (401, 403))
 
 
 def _tool_msg(idx: int, name: str, result: Any, spec=None, toolset=None,

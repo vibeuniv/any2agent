@@ -197,7 +197,9 @@ fetch('evals').then(function(r){return r.json();}).then(function(d){
   var b=document.getElementById('evalBadge');
   if(!d.evaluated){b.textContent='— not evaluated';b.style.display='inline-flex';return;}
   var L=d.latest||{};
-  b.textContent=(L.passed?'✅ ':'❌ ')+(L.rate||0).toFixed(2)+' · '+(d.history||[]).length+' runs';
+  var sus=((d.runtime||{}).suspects||[]).length;
+  b.textContent=(L.passed?'✅ ':'❌ ')+(L.rate||0).toFixed(2)+' · '+(d.history||[]).length+' runs'+(sus?' ⚠':'');
+  if(sus) b.title='A tool is failing in live use — open the eval console';
   b.style.display='inline-flex';
 }).catch(function(){});
 
