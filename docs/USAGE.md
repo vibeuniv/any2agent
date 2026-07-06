@@ -68,6 +68,10 @@ Already have an OpenAPI spec? Skip the wizard: `any2agent init --openapi ./opena
 
 ## 3. Verify it actually works — `any2agent eval`
 
+> New to this? **[How self-verification works](HOW-EVAL-WORKS.md)** explains the
+> grading principle in plain language (also built into the console under
+> "How does this work?").
+
 This is the self-verification step: realistic multi-step tasks are generated
 from your tool set, run through the **real** agent loop against your live API,
 and graded deterministically (which tools ran, state re-read via your API,

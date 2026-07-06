@@ -128,6 +128,7 @@ Re-run `connect`/`init` whenever your API changes.
 The connect loop proves your tools *exist, are well-formed, respond, and get
 selected*. `eval` proves the thing that actually matters: **the agent completes
 realistic multi-step tasks** against your live API.
+*(How the grading works, in plain language: [docs/HOW-EVAL-WORKS.md](docs/HOW-EVAL-WORKS.md).)*
 
 ```bash
 any2agent eval --project yourapp            # read-only tasks (safe default)

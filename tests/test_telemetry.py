@@ -105,3 +105,64 @@ def test_evals_endpoint_exposes_runtime(toolset, tmp_path, monkeypatch):
     d = c.get("/evals").json()
     assert d["runtime"]["calls_total"] == 1
     assert d["runtime"]["tools"][0]["tool"] == "notes_list"
+
+def test_run_chat_records_executed_only(toolset, tmp_path, monkeypatch):
+    """FR-05 contract at the run_chat level: an executed tool = exactly one
+    line; a gated confirm_required = zero lines."""
+    from any2agent.core import registry, dispatch as dispatch_mod
+
+    sd = str(tmp_path / "s")
+    monkeypatch.setattr(registry, "resolve", lambda *a, **k: ({"id": "gpt"}, "m", "gpt"))
+    monkeypatch.setattr(registry, "completion_kwargs", lambda e: {})
+
+    class FakeDelta:
+        def __init__(self, tc=None): self.content = None; self.tool_calls = tc
+    class FakeTC:
+        def __init__(self, name):
+            self.index = 0
+            self.function = type("F", (), {"name": name, "arguments": "{}"})()
+    def fake_stream(name):
+        class Choice:
+            def __init__(self, d): self.delta = d
+        class Chunk:
+            def __init__(self, d): self.choices = [Choice(d)]
+        return iter([Chunk(FakeDelta([FakeTC(name)]))])
+
+    calls = {"n": 0}
+    def fake_completion(model, msgs, tools=None, stream=True, extra=None):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("stop the loop")
+        return fake_stream(fake_completion.tool)
+    monkeypatch.setattr(registry, "completion", fake_completion)
+
+    class Spy:
+        def call(self, spec, args, ctx):
+            return {"ok": True, "status": 200, "data": []}
+
+    # executed read tool → one telemetry line
+    fake_completion.tool = "get__notes"
+    calls["n"] = 0
+    list(core_agent.run_chat([{"role": "user", "content": "x"}], toolset, Spy(),
+                             ctx={"state_dir": sd}))
+    assert len(T.load(sd)) == 1 and T.load(sd)[0]["tool"] == "get__notes"
+
+    # gated write tool (no auto_confirm) → confirm event, NO telemetry line
+    fake_completion.tool = "post__notes"
+    calls["n"] = 0
+    events = list(core_agent.run_chat([{"role": "user", "content": "x"}], toolset, Spy(),
+                                      ctx={"state_dir": sd}))
+    assert any(e["type"] == "confirm" for e in events)
+    assert len(T.load(sd)) == 1, "confirm_required must not be recorded"
+
+
+def test_load_skips_corrupt_lines(tmp_path):
+    sd = str(tmp_path / "s")
+    T.record(sd, "a", ok=True, status=200, ms=40)
+    with open(T.path(sd), "a") as f:
+        f.write("{corrupt\n")
+    T.record(sd, "a", ok=True, status=200, ms=60)
+    entries = T.load(sd)
+    assert len(entries) == 2
+    # avg_ms computed over the surviving entries
+    assert T.summary(sd)["tools"][0]["avg_ms"] == 50

@@ -84,6 +84,16 @@
   td{padding:6px 8px;border-bottom:1px solid var(--line)} tr:last-child td{border-bottom:0}
   .empty{text-align:center;color:var(--mut);padding:60px 0}
   .empty code{background:var(--user);border-radius:6px;padding:2px 8px}
+
+  /* help panel */
+  .help summary{font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}
+  .help summary::before{content:"?";display:inline-flex;align-items:center;justify-content:center;
+    width:20px;height:20px;border-radius:50%;background:var(--user);color:var(--accent);font-weight:800;font-size:12px}
+  .help[open] summary{margin-bottom:10px}
+  .help h3{font-size:13px;margin:14px 0 4px}
+  .help p, .help li{font-size:13px;color:var(--mut);margin:4px 0}
+  .help b{color:var(--ink)}
+  .help ol{padding-left:20px;margin:4px 0}
 </style>
 </head>
 <body>
@@ -127,8 +137,11 @@ const CAUSE = {
 fetch('/evals').then(r => r.json()).then(d => {
   const m = document.getElementById('main');
   if (!d.evaluated){
+    // never eval'd, but live telemetry (incl. drift warnings) must still show —
+    // the runtime signal is always-on, not gated behind a first eval run
     m.innerHTML = `<div class="empty"><p><b>This agent hasn’t been checked yet.</b></p>
-      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> to test it with real tasks, then refresh.</p></div>`;
+      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> to test it with real tasks, then refresh.</p></div>`
+      + liveUsageCard(d) + HELP;
     return;
   }
   const L = d.latest, ok = L.passed, hist = d.history || [];
@@ -194,24 +207,7 @@ fetch('/evals').then(r => r.json()).then(d => {
   }
 
   // ── live usage (runtime telemetry) ──
-  const rt = d.runtime || {calls_total: 0};
-  if (rt.calls_total > 0){
-    const sus = rt.suspects || [];
-    html += `<div class="card"><h2>Live usage — real conversations, not test runs</h2>` +
-      sus.map(s => `<div class="fail">
-        <p class="req">⚠ <code>${esc(s.tool)}</code> keeps failing in live use
-          (${s.recent_errors} of its last ${s.recent_calls} calls)</p>
-        <p class="action"><b>Next:</b> the API behind it may have changed — run
-          <code>any2agent eval --project ${esc(d.project)}</code> to re-verify.</p>
-      </div>`).join('') +
-      `<table><thead><tr><th>tool</th><th>calls</th><th>failures</th><th>avg speed</th><th>last used</th></tr></thead><tbody>` +
-      (rt.tools || []).map(t =>
-        `<tr><td><code>${esc(t.tool)}</code></td><td>${t.calls}</td>
-         <td>${t.errors ? t.errors + ' (' + Math.round(t.error_rate*100) + '%)' : '—'}</td>
-         <td>${t.avg_ms != null ? t.avg_ms + ' ms' : '—'}</td><td>${ago(t.last_ts)}</td></tr>`).join('') +
-      `</tbody></table>
-      <p class="note">${rt.calls_total} call(s) recorded. Only tool names and outcomes are logged — never arguments, responses, or user identity.</p></div>`;
-  }
+  html += liveUsageCard(d);
 
   // ── lessons in plain terms ──
   if ((d.lessons||[]).length){
@@ -221,10 +217,71 @@ fetch('/evals').then(r => r.json()).then(d => {
       d.lessons.map((l, i) => `<div class="lesson"><span class="n">${i+1}.</span><span>${esc(l.guidance)}</span></div>`).join('') +
       `</div>`;
   }
+  html += HELP;
   m.innerHTML = html;
 }).catch(() => {
-  document.getElementById('main').innerHTML = '<div class="empty">Failed to load /evals.</div>';
+  document.getElementById('main').innerHTML = '<div class="empty">Failed to load /evals.</div>' + HELP;
 });
+
+// live telemetry card — shown whether or not an eval has ever run
+function liveUsageCard(d){
+  const rt = d.runtime || {calls_total: 0};
+  if (!(rt.calls_total > 0)) return '';
+  const sus = rt.suspects || [];
+  return `<div class="card"><h2>Live usage — real conversations, not test runs</h2>` +
+    sus.map(s => `<div class="fail">
+      <p class="req">⚠ <code>${esc(s.tool)}</code> keeps failing in live use
+        (${s.recent_errors} of its last ${s.recent_calls} calls)</p>
+      <p class="action"><b>Next:</b> the API behind it may have changed — run
+        <code>any2agent eval --project ${esc(d.project)}</code> to re-verify.</p>
+    </div>`).join('') +
+    `<table><thead><tr><th>tool</th><th>calls</th><th>failures</th><th>avg speed</th><th>last used</th></tr></thead><tbody>` +
+    (rt.tools || []).map(t =>
+      `<tr><td><code>${esc(t.tool)}</code></td><td>${t.calls}</td>
+       <td>${t.errors ? t.errors + ' (' + Math.round(t.error_rate*100) + '%)' : '—'}</td>
+       <td>${t.avg_ms != null ? t.avg_ms + ' ms' : '—'}</td><td>${ago(t.last_ts)}</td></tr>`).join('') +
+    `</tbody></table>
+    <p class="note">${rt.calls_total} call(s) recorded. Only tool names and outcomes are logged — never arguments, responses, or user identity.</p></div>`;
+}
+
+// always available — how the numbers on this page are made
+const HELP = `<div class="card"><details class="help">
+  <summary>How does this work?</summary>
+  <p><b>The one idea:</b> doing work is hard, checking it is easy. This console never
+  trusts the agent's own words — every claim is graded against independent evidence.</p>
+
+  <h3>How a check runs</h3>
+  <ol>
+    <li>Realistic test tasks are generated from your tool set (you can edit them —
+        your <code>evals.json</code> always wins).</li>
+    <li>Each task runs through the <b>real</b> agent, against your <b>real</b> API.</li>
+    <li>Grading uses three signals, strongest first:
+        <b>world state</b> — the grader calls your API directly to confirm claimed
+        results actually exist; <b>behavior</b> — the required tools must have really
+        been called; <b>an AI judge</b> — advisory only, checks the answer is grounded.</li>
+  </ol>
+
+  <h3>Why the score is honest</h3>
+  <p>Things that aren't the agent's fault (provider outages, budget cut-offs,
+  write tasks you didn't consent to) are <b>excluded from the score</b>, and a task
+  that can't be measured is never silently counted as a pass. Leftover test data
+  fails the gate no matter the score.</p>
+
+  <h3>After a failure</h3>
+  <p>Each failure becomes one plain "what to fix" line. Fixable ones are repaired
+  automatically (<code>eval --fix</code>); the rest become <b>lessons</b> — corrections
+  whispered to the agent in every conversation, which delete themselves once the
+  task passes. Lessons can never loosen confirmation or permission rules.</p>
+
+  <h3>Test runs vs. live usage</h3>
+  <p>Checks are build-time. In real conversations, <b>telemetry</b> logs each tool
+  call (name, outcome, speed — never your data). A tool failing most of its recent
+  live calls is flagged as a <b>suspect</b> — your API probably changed; re-run the
+  check. Recovered tools clear themselves.</p>
+
+  <p>Full guide: <code>docs/HOW-EVAL-WORKS.md</code> in the repo · run a check any
+  time with <code>any2agent eval --project ${esc((window.__project||document.title.split(' ·')[0]))}</code></p>
+</details></div>`;
 </script>
 </body>
 </html>
