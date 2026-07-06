@@ -23,6 +23,19 @@ All notable changes to this project are documented here. Format loosely follows
   confirmation), must tag payloads with `[a2a-eval]`, run cleanup calls after
   grading, and report un-cleaned residue honestly. Danger tools are allowed in
   cleanup only.
+- **Deterministic tool shaping** (`shape.py`, on by default in `connect`,
+  `--no-shape` to opt out) — stops shipping raw 1-route-=-1-tool wrappers:
+  mechanical names become `resource_action` (`get__notes` → `notes_list`,
+  `delete__notes_note_id` → `notes_delete`) so related tools group under a
+  resource prefix, and collection reads gain a `limit` parameter plus a
+  "prefer filters over fetching everything" nudge. Conservative: curated
+  names (OpenAPI operationIds) and collisions are kept and reported, never
+  mangled. Old names persist as **aliases** resolved everywhere (dispatch,
+  evals, lessons, tool search), so existing toolspecs and curated eval tasks
+  keep working. Idempotent via `meta.shaping`.
+- **`eval --compare OLD_TOOLSPEC`** — A/B two toolsets on the same task set
+  and print a verdict (non-inferior completion rate + call count); the old
+  run is measurement-only and never pollutes history or lessons.
 - **Test suite** — pytest coverage for the grader, runner confirm policy,
   task generation/validation, `task_eval` gating math, and an integration test
   against a real local HTTP server.

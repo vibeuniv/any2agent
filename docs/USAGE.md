@@ -48,6 +48,7 @@ Useful flags (all optional — the wizard asks otherwise):
 |---|---|
 | `--path`, `--project`, `--base-url` | skip the questions |
 | `--live` / `--no-live` | consent to live **read-only** probing of your API |
+| `--no-shape` | keep raw mechanical tool names (skip `resource_action` renaming + list promotion) |
 | `--session-cookie` / `--session-bearer` | verify under a real user session (RBAC-aware); or env `ANY2AGENT_VERIFY_COOKIE` / `ANY2AGENT_VERIFY_BEARER` |
 | `--eval` | after the loop, run the task-based eval as a final gate |
 | `--no-input` | CI mode: flags/defaults only |
@@ -99,6 +100,7 @@ What you'll see:
 | `--n 8` / `--threshold 0.8` / `--budget 40` | task count / gate / LLM call cap |
 | `--json report.json` | full report for CI artifacts |
 | `--model` / `--judge-model` | model under test / judge model |
+| `--compare old.toolspec.json` | A/B an older toolset on the same tasks; prints a keep/revert verdict |
 
 **Exit codes (CI-ready):** `0` gate passed · `1` below threshold · `2` cannot run
 (no key / no base_url). Failure classes you'll see: `wrong_tool`, `bad_args`,

@@ -25,6 +25,10 @@ class ToolSpec:
     danger: bool = False    # irreversible/destructive -> stronger confirm gate
     domain: str = ""        # optional grouping label (for tool discovery)
     defaults: Dict[str, Any] = field(default_factory=dict)  # default args merged when missing
+    # former names of this tool (e.g. pre-shaping "get__notes"). Resolved by
+    # ToolSet.by_name() so old toolspecs/evals/lessons keep working; never
+    # advertised to the LLM (to_function uses the canonical name only).
+    aliases: List[str] = field(default_factory=list)
 
     def to_function(self) -> Dict[str, Any]:
         """OpenAI/litellm tool-calling 'function' shape."""
@@ -51,6 +55,7 @@ class ToolSpec:
             danger=bool(d.get("danger")),
             domain=d.get("domain", ""),
             defaults=d.get("defaults") or {},
+            aliases=list(d.get("aliases") or []),
         )
 
 
@@ -63,7 +68,13 @@ class ToolSet:
         self.meta: Dict[str, Any] = meta or {}
 
     def by_name(self) -> Dict[str, ToolSpec]:
-        return {t.name: t for t in self.tools}
+        """Canonical names first, then aliases where they don't collide — so a
+        reference by an old (pre-shaping) name still resolves."""
+        out = {t.name: t for t in self.tools}
+        for t in self.tools:
+            for a in t.aliases:
+                out.setdefault(a, t)
+        return out
 
     def to_dict(self) -> Dict[str, Any]:
         return {

@@ -264,6 +264,17 @@ def connect(args) -> None:
     else:
         toolset = ToolSet(project, src_tools, src_meta)
 
+    # deterministic shaping: resource_action names + collection-read promotion
+    # (old names kept as aliases). Opt out with --no-shape.
+    if not getattr(args, "no_shape", False):
+        from . import shape
+        sh = shape.apply(toolset)
+        if not sh.get("noop"):
+            print("  shaping: renamed=%d promoted=%d skipped=%d"
+                  % (sh["renamed"], sh["promoted"], len(sh["skipped"])))
+            for s in sh["skipped"][:5]:
+                print("    - kept %s (%s)" % (s["name"], s["why"]))
+
     adapter = RestAdapter(base_url, auth) if base_url else None
     probes = _probes(toolset)
 

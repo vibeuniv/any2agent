@@ -47,22 +47,21 @@
 
 ## 2. Scope
 
-### 2.1 In Scope
+### 2.1 In Scope — Phase 1: 결정적 셰이핑 (사용자 확정 2026-07-06)
 
-- [ ] **셰이핑 단계**: 스캔 직후·verify 이전에 실행되는 도구 변환 패스 (connect 통합)
+- [ ] **셰이핑 단계**: 스캔 직후·verify 이전에 실행되는 결정적 도구 변환 패스 (connect 통합, opt-out 가능)
 - [ ] **리소스 기반 재명명** (결정적): `get__notes`→`notes_list`, `get__notes_note_id`→`notes_get`,
-      `post__notes`→`notes_create` — 리소스 접두사 네임스페이싱, 충돌 시 안전한 폴백
-- [ ] **alias 하위 호환**: 기존 이름을 `ToolSpec.aliases`로 보존, dispatch/검증/evals 참조 해석
-- [ ] **list→search 승격**: 배열 반환 read 도구에 필터·페이지네이션 파라미터 승격(스키마에
-      이미 있으면 결정적, 없으면 LLM 제안)
-- [ ] **워크플로 합성 도구** (LLM 제안 + 사람 승인): 자주 연쇄되는 호출(목록→상세,
-      조회→수정)을 composite 도구로 — 다중 backing 호출 오케스트레이션 실행기 포함
-- [ ] **eval A/B 게이트**: 셰이핑 전/후 toolset을 동일 태스크 세트로 실행, 완수율
-      non-inferior + 호출 수 개선일 때만 채택
-- [ ] **마이그레이션**: 기존 `<project>.toolspec.json`·curated `evals.json`의 도구명 참조 갱신 도구
+      `post__notes`→`notes_create` — 리소스 접두사 네임스페이싱, 충돌·비정형 시 기존 이름 유지(보수적 폴백)
+- [ ] **alias 하위 호환**: 기존 이름을 `ToolSpec.aliases`로 보존, dispatch/검증/evals/lessons 참조 해석
+- [ ] **list→search 승격** (결정적): 파라미터 없는 컬렉션 read 도구에 limit 파라미터 승격 +
+      "전체 목록 대신 필터/검색" 설명 유도 (LLM 파라미터 제안은 기존 synth_params 채널 재사용)
+- [ ] **eval A/B 게이트**: `eval --compare <old.toolspec.json>` — 두 toolset을 동일 태스크로 실행,
+      완수율 non-inferior + 호출 수 비교 리포트
 
-### 2.2 Out of Scope (후속 feature)
+### 2.2 Out of Scope (후속 사이클)
 
+- **워크플로 합성(composite) 도구** — Phase 2: eval A/B로 Phase 1 효과 검증 후,
+  eval 트랜스크립트의 도구 연쇄 데이터를 근거로 착수 (다중 backing 실행기·부분 실패 처리 포함)
 - 응답 셰이핑(`response_format` concise/detailed, 필드 필터링) — 별도 feature
 - 런타임 텔레메트리·드리프트 감지
 - toolrag 검색 고도화(임베딩)

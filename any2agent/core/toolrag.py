@@ -45,6 +45,7 @@ def score(query: str, spec: ToolSpec) -> float:
     if not q:
         return 0.0
     hay = " ".join([spec.name, spec.description, spec.domain,
+                    " ".join(getattr(spec, "aliases", []) or []),
                     " ".join((spec.parameters or {}).get("properties", {}).keys())])
     h = set(_tokens(hay))
     if not h:

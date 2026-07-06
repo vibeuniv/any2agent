@@ -243,12 +243,17 @@ for single-user/local. Set `memory_enabled = false` to turn it off.
 
 ```
 1. scan      OpenAPI spec OR source tree   → tools + the true route list
-2. auth      detect the login/session scheme → passthrough plan
-3. verify    coverage · correctness · live calls · agent tool-selection
-4. repair    fill gaps (params, descriptions, missing routes) → re-verify
-5. eval      (opt-in) realistic tasks through the real agent loop → completion gate
-6. serve     chat UI + /chat API  (multi-model, write/danger confirm gate)
+2. shape     resource_action names (notes_list, not get__notes) + collection
+             reads steered toward filters/limit — old names kept as aliases
+3. auth      detect the login/session scheme → passthrough plan
+4. verify    coverage · correctness · live calls · agent tool-selection
+5. repair    fill gaps (params, descriptions, missing routes) → re-verify
+6. eval      (opt-in) realistic tasks through the real agent loop → completion gate
+7. serve     chat UI + /chat API  (multi-model, write/danger confirm gate)
 ```
+
+Changed the tool set? `any2agent eval --compare old.toolspec.json` A/Bs both
+against the same tasks and tells you which one to keep.
 
 The loop stops when **all checks pass**, or at a budget/no-progress limit — and
 then prints exactly what's still unverified (it never silently claims success).

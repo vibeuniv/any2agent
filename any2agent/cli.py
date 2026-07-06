@@ -152,6 +152,27 @@ def cmd_eval(args):
     adapter = RestAdapter(cfg.base_url, cfg.auth)
     n_read = sum(1 for t in tasks if t.kind == "read")
     print("[eval] tasks=%d (read=%d write=%d)  target=%s" % (len(tasks), n_read, len(tasks) - n_read, cfg.base_url))
+
+    # --compare: A/B the current toolset against an older one on the SAME tasks.
+    # The old run is measurement only — it never touches history or lessons.
+    compare_path = getattr(args, "compare", None)
+    old_rep = None
+    if compare_path:
+        if not os.path.exists(compare_path):
+            print("[eval] --compare file not found: %s" % compare_path, file=sys.stderr)
+            sys.exit(2)
+        old_ts = ToolSet.load(compare_path)
+        old_tasks, old_invalid = eval_tasks.validate(tasks, old_ts)
+        if old_invalid:
+            print("[compare] %d task(s) not runnable on the OLD toolset (excluded there): %s"
+                  % (len(old_invalid), ",".join(iv["id"] for iv in old_invalid[:6])))
+        eval_budget.reset((getattr(args, "budget", None) or 40) * 2)  # two runs share one doubled cap
+        print("[compare] running OLD toolset (%s)…" % compare_path)
+        old_rep = V.task_eval(old_ts, adapter, old_tasks, model_id=getattr(args, "model", None),
+                              threshold=args.threshold, write_ok=write_ok, verify_ctx=verify_ctx,
+                              judge_model=getattr(args, "judge_model", None))
+        print("[compare] running CURRENT toolset…")
+
     rep = V.task_eval(ts, adapter, tasks, model_id=getattr(args, "model", None),
                       threshold=args.threshold, write_ok=write_ok, verify_ctx=verify_ctx,
                       judge_model=getattr(args, "judge_model", None))
@@ -206,9 +227,24 @@ def cmd_eval(args):
             else:
                 print("[eval] fix: nothing auto-fixable (see lessons for manual guidance).")
 
+    if old_rep is not None and not old_rep.get("skipped"):
+        om, nm = old_rep["metrics"], rep["metrics"]
+        print("[compare] old: rate=%.2f avg_tools=%.1f wrong=%d   new: rate=%.2f avg_tools=%.1f wrong=%d"
+              % (old_rep["rate"], om["avg_tool_calls"], om["wrong_tool_calls"],
+                 rep["rate"], nm["avg_tool_calls"], nm["wrong_tool_calls"]))
+        non_inferior = rep["rate"] >= old_rep["rate"] - 0.05
+        fewer_calls = nm["avg_tool_calls"] <= om["avg_tool_calls"]
+        if non_inferior and fewer_calls:
+            print("[compare] verdict: ✅ non-inferior rate AND no more calls — keep the new toolset")
+        elif not non_inferior:
+            print("[compare] verdict: ❌ completion rate regressed — consider reverting to %s" % compare_path)
+        else:
+            print("[compare] verdict: ⚠ rate held but call count grew — inspect per-task metrics (--json)")
+
     if getattr(args, "json", None):
+        out = {"current": rep, "old": old_rep} if old_rep is not None else rep
         with open(args.json, "w", encoding="utf-8") as f:
-            _json.dump(rep, f, ensure_ascii=False, indent=2)
+            _json.dump(out, f, ensure_ascii=False, indent=2)
         print("[eval] report -> %s" % args.json)
     if rep["passed"]:
         print("[eval] ✅ gate passed")
@@ -275,6 +311,8 @@ def main(argv=None):
     sp.add_argument("--no-input", action="store_true", help="Non-interactive (use flags/defaults only)")
     sp.add_argument("--eval", dest="eval_gate", action="store_true",
                     help="After the verify loop, run the task-based eval as a final gate")
+    sp.add_argument("--no-shape", action="store_true",
+                    help="Skip deterministic tool shaping (resource_action names, list promotion)")
     sp.set_defaults(func=cmd_connect)
 
     sp = sub.add_parser("eval", help="Task-based self-verification: run realistic tasks through the agent and gate on completion rate")
@@ -291,6 +329,8 @@ def main(argv=None):
     sp.add_argument("--history", action="store_true", help="Show the last recorded runs and exit")
     sp.add_argument("--fix", action="store_true",
                     help="Auto-apply repair for fixable failures (description rewrite, param synthesis)")
+    sp.add_argument("--compare", metavar="OLD_TOOLSPEC",
+                    help="A/B: also run the same tasks on an older toolspec and print a verdict")
     sp.set_defaults(func=cmd_eval)
 
     args = p.parse_args(argv)
