@@ -9,11 +9,15 @@
 any2agent turns an existing API-backed project into a chat agent — **without you
 writing any glue code**. It reads your API (from an OpenAPI file *or your source
 code*), works out the routes **and how you authenticate users**, builds a tool
-set, **checks it against your live API**, and serves a chat UI.
+set, **checks it against your live API**, and serves a chat UI. Then it goes one
+step further: it **proves the agent can complete real tasks** (`eval`) and
+**learns from every failure**.
 
 ```
 your project ──▶  any2agent connect  ──▶  a chat agent that calls your API
                   scan → verify → repair (loops until it actually works)
+                       └─▶ eval: real tasks through the real agent → completion rate
+                           failures become lessons the agent won't repeat
 ```
 
 ![any2agent connect — detect auth, scan every route, verify the tool set](docs/demo.gif)
@@ -40,6 +44,9 @@ there. any2agent goes further:
 | Input | OpenAPI spec only | **Spec OR your source tree** |
 | Auth / permissions | you wire it | **detected from your code, user session passed through (RBAC kept)** |
 | Correctness | trust the output | **verify → repair loop with an honest report** |
+| Does it actually work? | you find out in prod | **`eval`: realistic multi-step tasks through the real agent, graded against your live API** |
+| When it fails | you debug | **failures become one-line fixes + lessons the agent applies in every chat turn** |
+| Visibility | logs, maybe | **trust badge + `/evals/ui` console (rate trend, history, what-to-fix)** |
 | Onboarding | manual | **one `connect` command** |
 
 ---
@@ -110,6 +117,7 @@ Runnable example: [`examples/petstore`](examples/petstore).
 | `yourapp.toolspec.json` | the tools — one per API operation. Editable, re-runnable. |
 | `yourapp.any2agent.toml` | config: base URL, auth method, default model. |
 | `yourapp.evals.json` | eval tasks for `any2agent eval` — auto-generated, then yours to curate. |
+| `yourapp.eval-lessons.json` | guidance learned from eval failures — auto-managed, injected at serve time. |
 
 Re-run `connect`/`init` whenever your API changes.
 
@@ -145,6 +153,12 @@ any2agent eval --project yourapp --live-write   # allow write tasks (never on pr
 - **See it in the browser.** The chat header shows a trust badge
   (`✅ 0.88 · 3 runs`) that links to `/evals/ui` — a read-only console with the
   rate trend, run history, what-to-fix lines, and active lessons.
+
+<img src="docs/eval-console.png" alt="any2agent eval console — status, what to fix, history, active lessons" width="100%">
+
+> Real console after three eval runs on `examples/notes-api`: the rate dropped
+> to 0.50, the failure was classified `wrong_tool` with a one-line fix, and the
+> lesson at the bottom is now injected into every chat turn.
 
 ---
 
