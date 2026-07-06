@@ -37,3 +37,6 @@ marketing/
 .bkit/
 .claude/
 .playwright-mcp/
+
+# macOS noise
+.DS_Store
