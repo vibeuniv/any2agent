@@ -32,7 +32,8 @@
 
 - **A안(스캐너 수정)**: `_name()`을 직접 고침 — alias 없이는 기존 아티팩트 전부 파손, OpenAPI 경로와 이원화. 기각
 - **B안(독립 shape 패키지 + 마이그레이션 CLI)**: 과설계 — Phase 1 규모에 마이그레이션 커맨드는 불필요(alias가 해결)
-- **C안(채택)**: `any2agent/shape.py` 단일 모듈, 스캔 산출물을 입력으로 받는 순수 변환 패스 + `spec.py` alias 지원
+- **C안(채택)**: `any2agent/shape.py` 단일 모듈 — toolset을 in-place 변형하고 통계 dict를
+  반환하는 패스(§4.3 계약이 정본) + `spec.py` alias 지원
 
 ```
 connect:  scan ──▶ shape.apply(toolset)  ──▶ verify → repair → (--eval)
@@ -75,7 +76,7 @@ action 결정 표:
 
 | method | path 끝이 `{var}` | action |
 |---|---|---|
-| GET/HEAD | no | `list` (컬렉션) / 정적 단일 세그먼트 루트면 `get` (`/health`→`health_get`) |
+| GET/HEAD | no | `list` (컬렉션 — 마지막 정적 세그먼트가 복수형이면 컬렉션으로 판정) / 단일 정적 세그먼트 + 비복수형이면 싱글턴 `get` (`/health`→`health_get`, `/notes`→`notes_list`) |
 | GET/HEAD | yes | `get` |
 | POST | no | `create` |
 | POST | yes | `update` (RPC성 POST) |

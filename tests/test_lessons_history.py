@@ -120,6 +120,15 @@ def test_render_empty_and_nonempty():
     assert "- g1" in txt and "- g2" in txt
 
 
+def test_stale_detection_resolves_aliases(toolset):
+    # a lesson written pre-shaping (old tool name) must survive stale filtering
+    toolset.tools[0].aliases.append("legacy__notes")
+    lesson = {"task_id": "t1", "class": "wrong_tool", "when": "w",
+              "guidance": "use legacy__notes for listing"}
+    names = set(toolset.by_name().keys())   # includes aliases
+    assert L._references_known_tools(lesson, names)
+
+
 # ── eval --fix saves repaired toolspec ───────────────────────────────────────
 
 def test_eval_fix_saves_toolspec(toolset, tmp_path, monkeypatch):

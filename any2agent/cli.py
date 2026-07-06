@@ -158,10 +158,14 @@ def cmd_eval(args):
     compare_path = getattr(args, "compare", None)
     old_rep = None
     if compare_path:
-        if not os.path.exists(compare_path):
+        try:
+            old_ts = ToolSet.load(compare_path)
+        except FileNotFoundError:
             print("[eval] --compare file not found: %s" % compare_path, file=sys.stderr)
             sys.exit(2)
-        old_ts = ToolSet.load(compare_path)
+        except Exception as e:
+            print("[eval] --compare file unreadable (%s): %s" % (e, compare_path), file=sys.stderr)
+            sys.exit(2)
         old_tasks, old_invalid = eval_tasks.validate(tasks, old_ts)
         if old_invalid:
             print("[compare] %d task(s) not runnable on the OLD toolset (excluded there): %s"
