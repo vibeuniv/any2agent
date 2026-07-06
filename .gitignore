@@ -27,3 +27,13 @@ venv/
 env/
 LAUNCH.md
 marketing/
+
+# Generated eval artifacts (reproducible via `any2agent eval`)
+*.evals.json
+*.eval-lessons.json
+*.eval-report.json
+
+# Local tool/session state
+.bkit/
+.claude/
+.playwright-mcp/
