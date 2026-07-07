@@ -114,7 +114,7 @@ Tool catalog:
 %s"""
 
 
-def _llm_propose(toolset: ToolSet, chains, n: int, model_id: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+def _llm_propose(toolset: ToolSet, chains, model_id: Optional[str]) -> Optional[List[Dict[str, Any]]]:
     """One completion call (no loop -> no separate budget). Returns raw candidate
     dicts or None (no key / parse failure). Monkeypatched in proposal tests."""
     entry, model_string, _ = registry.resolve(model_id)
@@ -192,7 +192,7 @@ def propose(toolset: ToolSet, chains=None, n: int = 6,
     """Returns (accepted, rejected). accepted = [(spec, source)] ready to adopt;
     rejected = [{name, why}] reported honestly (never silently dropped)."""
     by_name = toolset.by_name()
-    raw = _llm_propose(toolset, chains, n, model_id)
+    raw = _llm_propose(toolset, chains, model_id)
     default_src = "llm"
     if not raw:
         raw = _deterministic_propose(toolset, chains, n)

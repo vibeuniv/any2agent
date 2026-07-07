@@ -23,8 +23,6 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "litellm",
-    "httpx",
-    "pyyaml",
     "tomli; python_version < '3.11'",
 ]
 
@@ -33,7 +31,9 @@ dependencies = [
 embeddings = ["openai"]
 # Load keys from a local .env (optional; shell env works without it).
 dotenv = ["python-dotenv"]
-dev = ["pytest"]
+# YAML OpenAPI/Swagger contracts (JSON contracts need nothing).
+yaml = ["pyyaml"]
+dev = ["pytest", "httpx"]  # httpx: fastapi TestClient only — runtime uses stdlib urllib
 
 [project.scripts]
 any2agent = "any2agent.cli:main"

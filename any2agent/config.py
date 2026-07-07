@@ -21,6 +21,17 @@ except ModuleNotFoundError:  # py3.9/3.10
     import tomli as _toml  # type: ignore
 
 
+def verify_ctx_from_env() -> Dict[str, Any]:
+    """Verification session (the user's own) from env — used by connect's live
+    probes and `eval` runs alike. Read-only here; never persisted."""
+    ctx: Dict[str, Any] = {}
+    if os.getenv("ANY2AGENT_VERIFY_COOKIE"):
+        ctx["cookie"] = os.getenv("ANY2AGENT_VERIFY_COOKIE")
+    if os.getenv("ANY2AGENT_VERIFY_BEARER"):
+        ctx["in_headers"] = {"authorization": "Bearer " + os.getenv("ANY2AGENT_VERIFY_BEARER")}
+    return ctx
+
+
 def slugify(name: str) -> str:
     out = "".join(c if (c.isalnum() or c in "-_") else "-" for c in name.strip().lower())
     while "--" in out:

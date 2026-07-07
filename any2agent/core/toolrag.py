@@ -155,6 +155,5 @@ def build_seed(tools: List[ToolSpec], discovered: List[str] | None = None) -> Li
             seed[t.name] = t
     for n in (discovered or []):
         if n in by_name:
-            seed[by_name[n]] = by_name[n] if False else by_name[n]  # noqa
             seed[n] = by_name[n]
     return list(seed.values())[:DIRECT_LIMIT]

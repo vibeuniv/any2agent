@@ -13,7 +13,6 @@ what was/wasn't verified (no silent "done").
 """
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 from .spec import ToolSet, ToolSpec
@@ -213,17 +212,12 @@ THRESHOLDS = {"coverage_pct": 1.0, "accuracy_bad": 0, "liveness_fail": 0,
 def run_all(toolset: ToolSet, routes, adapter: Optional[Adapter], probes,
             live: bool, model_id: Optional[str] = None,
             verify_ctx: Optional[Dict[str, Any]] = None,
-            thresholds: Optional[Dict[str, Any]] = None,
-            eval_tasks=None, eval_write_ok: bool = False) -> Dict[str, Any]:
+            thresholds: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     th = {**THRESHOLDS, **(thresholds or {})}
     reports = [coverage(toolset, routes), accuracy(toolset)]
     if live and adapter is not None:
         reports.append(liveness(toolset, adapter, ctx=verify_ctx))
         reports.append(agent_e2e(toolset, probes, model_id, threshold=th["e2e_rate"]))
-        if eval_tasks is not None:
-            reports.append(task_eval(toolset, adapter, eval_tasks, model_id=model_id,
-                                     threshold=th["task_eval_rate"],
-                                     write_ok=eval_write_ok, verify_ctx=verify_ctx))
     # passed=None (skipped) does not fail the gate
     gate = all(r.get("passed") in (True, None) for r in reports)
     return {"passed": gate, "reports": reports, "thresholds": th}

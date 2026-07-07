@@ -158,11 +158,8 @@ def cmd_eval(args):
         print("[eval] no runnable tasks — curate %s or fix the toolspec." % cfg.evals_path(), file=sys.stderr)
         sys.exit(2)
 
-    verify_ctx = {}
-    if os.getenv("ANY2AGENT_VERIFY_COOKIE"):
-        verify_ctx["cookie"] = os.getenv("ANY2AGENT_VERIFY_COOKIE")
-    if os.getenv("ANY2AGENT_VERIFY_BEARER"):
-        verify_ctx["in_headers"] = {"authorization": "Bearer " + os.getenv("ANY2AGENT_VERIFY_BEARER")}
+    from .config import verify_ctx_from_env
+    verify_ctx = verify_ctx_from_env()
 
     adapter = RestAdapter(cfg.base_url, cfg.auth)
     n_read = sum(1 for t in tasks if t.kind == "read")
@@ -320,7 +317,6 @@ def main(argv=None):
     sp.add_argument("--project", help="Project name (default: target dir name)")
     sp.add_argument("--base-url", help="Live API base URL (for verification/runtime)")
     sp.add_argument("--auth", choices=["none", "bearer", "api_key_header", "cookie"])
-    sp.add_argument("--token-env"); sp.add_argument("--header"); sp.add_argument("--cookie-name")
     sp.add_argument("--default-model")
     sp.add_argument("--live", dest="live", action="store_true", default=None, help="Consent to live read probing")
     sp.add_argument("--no-live", dest="live", action="store_false", help="Disable live probing")

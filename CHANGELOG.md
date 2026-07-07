@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+- **2 fewer runtime dependencies** (ponytail audit): the REST adapter now uses
+  stdlib `urllib` (one synchronous JSON call never needed httpx), and pyyaml
+  moved to an optional `[yaml]` extra (only YAML contracts need it — JSON
+  contracts and source scans need nothing). httpx remains a dev/test dep for
+  fastapi's TestClient.
+- Ponytail-audit cleanup across the tree: dead branches/flags/params removed
+  (`--token-env/--header/--cookie-name` on connect were silently ignored),
+  duplicated verify-session builder unified into `config.verify_ctx_from_env`,
+  stale docstrings dropped (~70 lines net). `AGENTS.md` now carries the
+  decision ladder (adapted from ponytail, MIT) + this repo's invariants.
+
 ### Added
 - **`any2agent migrate`** — modernize curated files after tool shaping:
   rewrites old tool-name references (from aliases + the shaping audit map) in

@@ -40,10 +40,10 @@ def _ask(prompt: str, preset: Optional[str], default: str = "", interactive: boo
 def _guess_base_url(root: str) -> str:
     """Autonomy: infer a likely API base URL from the project's own config/source
     (.env *_URL/BASE_URL, common dev ports). Best-effort default the user confirms."""
-    import os
     # prefer the app's OWN base (APP_URL/SELF/SITE/BASE_URL) over third-party service
-    # URLs (supabase/auth providers), which are NOT where this project's API lives.
-    primary, secondary = [], []
+    # URLs (supabase/auth providers), which are NOT where this project's API lives —
+    # those are dropped outright; self-hosted APIs fall through to the dev-port guess.
+    primary = []
     _THIRD = ("supabase", "auth0", "clerk", "firebaseio", "amazonaws", "stripe", "googleapis")
     for name in (".env", ".env.local", ".env.example", ".env.development"):
         p = os.path.join(root, name)
@@ -58,14 +58,12 @@ def _guess_base_url(root: str) -> str:
                     v = m.group(2).strip().strip('"\'')
                     if not v.startswith("http"):
                         continue
-                    (secondary if any(x in v.lower() for x in _THIRD) else primary).append(v)
+                    if not any(x in v.lower() for x in _THIRD):
+                        primary.append(v)
         except Exception:
             pass
     if primary:
         return primary[0].rstrip("/")
-    # secondary (third-party) only if nothing better — but for self-hosted APIs prefer dev port below
-    if secondary and False:
-        return secondary[0].rstrip("/")
     # 2) framework default dev ports
     fw_port = {"nextjs": 3000, "express": 3000, "nestjs": 3000, "fastapi": 8000,
                "flask": 5000, "django": 8000, "spring": 8080}
@@ -82,7 +80,6 @@ def _guess_base_url(root: str) -> str:
 def _build_source_index(root: str, cap: int = 60) -> Dict[str, str]:
     """Map an API path -> a small source snippet mentioning it, used as a hint for
     LLM parameter synthesis. Cheap best-effort scan; safe to be partial."""
-    import os
     idx: Dict[str, str] = {}
     skip = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".next"}
     exts = (".py", ".js", ".ts", ".tsx", ".java", ".rb", ".go")
@@ -197,8 +194,9 @@ def _repair(toolset: ToolSet, rep: Dict[str, Any], src_index: Dict[str, str]) ->
 
         # 4) liveness: transport failures (not authz) -> quarantine (don't ship broken)
         if r["name"] == "liveness" and r.get("failed"):
+            name2tool = {tt.name: tt for tt in toolset.tools}
             for f in r["failed"]:
-                t = {tt.name: tt for tt in toolset.tools}.get(f["name"])
+                t = name2tool.get(f["name"])
                 if t and not t.defaults.get("_disabled"):
                     t.defaults["_disabled"] = True   # marked; excluded from serving
                     changes += 1
@@ -288,14 +286,13 @@ def connect(args) -> None:
 
     # verification session (user's own) for live RBAC probing — passthrough into ctx.
     # Supplied via flags or env; used ONLY for verification, never stored.
-    sess_cookie = getattr(args, "session_cookie", None) or os.getenv("ANY2AGENT_VERIFY_COOKIE", "")
-    sess_bearer = getattr(args, "session_bearer", None) or os.getenv("ANY2AGENT_VERIFY_BEARER", "")
-    verify_ctx: Dict[str, Any] = {}
-    if sess_cookie:
-        verify_ctx["cookie"] = sess_cookie
-    if sess_bearer:
-        verify_ctx["in_headers"] = {"authorization": "Bearer " + sess_bearer}
-    if live and not (sess_cookie or sess_bearer):
+    from .config import verify_ctx_from_env
+    verify_ctx: Dict[str, Any] = verify_ctx_from_env()
+    if getattr(args, "session_cookie", None):
+        verify_ctx["cookie"] = args.session_cookie
+    if getattr(args, "session_bearer", None):
+        verify_ctx["in_headers"] = {"authorization": "Bearer " + args.session_bearer}
+    if live and not verify_ctx:
         print("  - no verification session provided -> unauthenticated probes (401/403 = authz, reported honestly)")
 
     # ---- verify -> repair loop ----

@@ -1,7 +1,9 @@
-"""Generic REST adapter (httpx). Builds the request from base_url + backing.path
-(filling {path} params), routes remaining args to query (GET/DELETE) or JSON body
-(POST/PUT/PATCH), and applies pluggable auth from config. Credentials come from
-env vars named in the auth block — never from the spec or config file.
+"""Generic REST adapter (stdlib urllib — one plain synchronous JSON request is
+all a tool call needs; ponytail: stdlib does it). Builds the request from
+base_url + backing.path (filling {path} params), routes remaining args to query
+(GET/DELETE) or JSON body (POST/PUT/PATCH), and applies pluggable auth from
+config. Credentials come from env vars named in the auth block — never from the
+spec or config file.
 """
 from __future__ import annotations
 
@@ -9,12 +11,9 @@ import json
 import os
 import re
 from typing import Any, Dict
+from urllib import error as urlerror
+from urllib import request as urlrequest
 from urllib.parse import urlencode
-
-try:
-    import httpx  # type: ignore
-except Exception:  # pragma: no cover
-    httpx = None  # type: ignore
 
 from ..spec import ToolSpec
 from .base import Adapter
@@ -63,8 +62,6 @@ class RestAdapter(Adapter):
         return h
 
     def call(self, spec: ToolSpec, args: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
-        if httpx is None:
-            return {"ok": False, "error": "httpx not installed"}
         method = (spec.backing.get("method") or "GET").upper()
         path = spec.backing.get("path") or "/"
         merged = {**(spec.defaults or {}), **_clean(args)}
@@ -84,23 +81,32 @@ class RestAdapter(Adapter):
         elif rest:
             url = url + ("&" if "?" in url else "?") + urlencode({k: _scalar(v) for k, v in rest.items()})
 
+        headers = self._headers(ctx)
+        payload = None
+        if body is not None:
+            payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            headers["Content-Type"] = "application/json"
         try:
-            with httpx.Client(timeout=self.timeout) as cli:
-                resp = cli.request(method, url, headers=self._headers(ctx),
-                                   json=body if body is not None else None)
-            ct = resp.headers.get("content-type", "")
+            req = urlrequest.Request(url, data=payload, headers=headers, method=method)
+            try:
+                resp = urlrequest.urlopen(req, timeout=self.timeout)  # noqa: S310 (user-configured API base)
+                status, ct = resp.status, resp.headers.get("content-type", "")
+                text = resp.read().decode("utf-8", "replace")
+            except urlerror.HTTPError as e:  # non-2xx still carries a body
+                status, ct = e.code, e.headers.get("content-type", "") if e.headers else ""
+                text = e.read().decode("utf-8", "replace")
             data: Any
             if "application/json" in ct:
                 try:
-                    data = resp.json()
+                    data = json.loads(text)
                 except Exception:
-                    data = resp.text[:4000]
+                    data = text[:4000]
             else:
-                data = resp.text[:4000]
-            ok = 200 <= resp.status_code < 300
-            out = {"ok": ok, "status": resp.status_code, "data": data}
+                data = text[:4000]
+            ok = 200 <= status < 300
+            out = {"ok": ok, "status": status, "data": data}
             if not ok:
-                out["error"] = "http_%d" % resp.status_code
+                out["error"] = "http_%d" % status
             return out
         except Exception as e:  # connection refused / timeout / dns
             return {"ok": False, "error": str(e)}

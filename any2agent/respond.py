@@ -38,8 +38,8 @@ _TOKEN_STYLE = {"page", "cursor", "after"}
 
 # ── success-path shaping ─────────────────────────────────────────────────────
 
-def shape(data: Any, mode: str = "concise", max_items: Optional[int] = None,
-          max_str: int = _MAX_STR) -> Tuple[Any, List[str], List[Dict[str, int]]]:
+def shape(data: Any, mode: str = "concise",
+          max_items: Optional[int] = None) -> Tuple[Any, List[str], List[Dict[str, int]]]:
     """Structure-aware trim. Returns (shaped, notes, truncations) where
     truncations = [{"shown","total"}] per truncated list. concise also drops
     null/empty fields; detailed keeps every field (IDs stay available for
@@ -65,9 +65,9 @@ def shape(data: Any, mode: str = "concise", max_items: Optional[int] = None,
                     continue
                 out[k] = w
             return out
-        if isinstance(v, str) and len(v) > max_str:
+        if isinstance(v, str) and len(v) > _MAX_STR:
             notes.append("a long text field was shortened")
-            return v[:max_str] + _TRUNC_MARK
+            return v[:_MAX_STR] + _TRUNC_MARK
         return v
 
     shaped = walk(data)
@@ -229,7 +229,6 @@ def render(result: Dict[str, Any], spec: Optional[ToolSpec] = None,
     them here. response_format picks the trim budget; fields projects every list
     item down to the named comma-separated keys (id always kept) for the model's
     reading — a defensive complement to the server-side `fields` projection that
-    shape.py advertises. WIRING NOTE: agent.py._tool_msg already forwards
     response_format; the leader must add the matching `fields` pop/forward in
     core/agent.py (mirror the `fmt = args.pop("response_format", ...)` line) after
     merge — until then `fields` is only reachable by direct callers/tests.

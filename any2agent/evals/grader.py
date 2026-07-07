@@ -16,9 +16,6 @@ from ..core import registry
 from . import budget
 from .model import EvalTask, EvalTrace, EvalResult
 
-CHECK_TYPES = ("tool_called", "state", "answer_contains", "no_errors", "judge")
-
-
 def grade(task: EvalTask, trace: EvalTrace, toolset: ToolSet, adapter: Optional[Adapter],
           model_id: Optional[str] = None, verify_ctx: Optional[Dict[str, Any]] = None,
           judge_model: Optional[str] = None) -> EvalResult:
@@ -61,7 +58,6 @@ def grade(task: EvalTask, trace: EvalTrace, toolset: ToolSet, adapter: Optional[
                              % (",".join(sorted(called_set)) or "none"))
 
     # 4) deterministic checks
-    judge_rubrics: List[str] = []
     det = [c for c in task.checks if c.get("type") != "judge"]
     judge_rubrics = [c.get("rubric", "") for c in task.checks if c.get("type") == "judge"]
     r.checks_total = len(det)
