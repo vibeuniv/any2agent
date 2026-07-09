@@ -277,7 +277,15 @@ def connect(args) -> None:
     probes = _probes(toolset)
 
     # source index (path -> handler snippet) for LLM param synthesis hints; reset LLM budget.
-    src_index = _build_source_index(path)
+    # Sending source excerpts to the LLM is opt-out (ANY2AGENT_NO_LLM_SOURCE=1).
+    from .config import llm_source_allowed
+    if llm_source_allowed():
+        src_index = _build_source_index(path)
+        if src_index and registry.llm_available():
+            print("  - note: source snippets may be sent to the LLM for parameter"
+                  " synthesis (set ANY2AGENT_NO_LLM_SOURCE=1 to disable)")
+    else:
+        src_index = {}
     try:
         from . import llm_repair as _desc
         _desc.reset_budget(60)

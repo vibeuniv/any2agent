@@ -217,6 +217,8 @@ any2agent eval --project myapp --json eval-report.json || exit 1
 
 | Symptom | Fix |
 |---|---|
+| `serve` refuses to start on 0.0.0.0 | Standing-credential auth on a public bind is a confused-deputy risk — bind `127.0.0.1`, use passthrough auth, or set `ANY2AGENT_TRUST_NETWORK=1` if the network is trusted |
+| Don't want source sent to the LLM | `ANY2AGENT_NO_LLM_SOURCE=1` — keeps source excerpts off the provider (schemas/descriptions still sent) |
 | `no LLM provider key set` (exit 2) | export one provider key (see §1) |
 | `base_url is empty` (exit 2) | set `base_url` in `yourapp.any2agent.toml` |
 | Everything 401/403 during verify/eval | your API requires login — pass a session: `ANY2AGENT_VERIFY_COOKIE` or `ANY2AGENT_VERIFY_BEARER` (401/403 under a real session = your RBAC working, reported as `authz`, not failure) |

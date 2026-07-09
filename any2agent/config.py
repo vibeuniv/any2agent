@@ -21,6 +21,14 @@ except ModuleNotFoundError:  # py3.9/3.10
     import tomli as _toml  # type: ignore
 
 
+def llm_source_allowed() -> bool:
+    """Whether build-time tooling may send raw SOURCE excerpts to the LLM
+    (param synthesis hints, layer-3 auth analysis). Opt out with
+    ANY2AGENT_NO_LLM_SOURCE=1 to keep source code off the provider — tool
+    names/descriptions/schemas are still sent, only source snippets are held back."""
+    return os.getenv("ANY2AGENT_NO_LLM_SOURCE", "").strip() not in ("1", "true", "yes")
+
+
 def verify_ctx_from_env() -> Dict[str, Any]:
     """Verification session (the user's own) from env — used by connect's live
     probes and `eval` runs alike. Read-only here; never persisted."""

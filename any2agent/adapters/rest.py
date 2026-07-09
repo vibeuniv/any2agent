@@ -13,13 +13,38 @@ import re
 from typing import Any, Dict
 from urllib import error as urlerror
 from urllib import request as urlrequest
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from ..spec import ToolSpec
 from .base import Adapter
 
 _PATH_VAR = re.compile(r"\{([^}]+)\}")
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
+_SENSITIVE = ("cookie", "authorization")
+
+
+class _SafeRedirect(urlrequest.HTTPRedirectHandler):
+    """urlopen re-sends request headers verbatim on redirect — including the
+    passthrough Cookie/Authorization — even to a DIFFERENT host, which leaks
+    the user's credentials. Strip those headers whenever the redirect target
+    changes origin (scheme/host/port). httpx does this for us; stdlib doesn't."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = self.parent  # noqa: unused; keep signature
+        nreq = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if nreq is not None and _origin(newurl) != _origin(req.full_url):
+            for h in _SENSITIVE:
+                nreq.remove_header(h.capitalize())
+        return nreq
+
+
+def _origin(url: str):
+    p = urlsplit(url)
+    return (p.scheme, p.hostname, p.port)
+
+
+# one opener with the safe redirect handler, reused for every call
+_OPENER = urlrequest.build_opener(_SafeRedirect())
 
 
 class RestAdapter(Adapter):
@@ -66,13 +91,20 @@ class RestAdapter(Adapter):
         path = spec.backing.get("path") or "/"
         merged = {**(spec.defaults or {}), **_clean(args)}
 
-        # fill path params
+        # fill path params — quote them so an LLM-supplied value can't inject a
+        # new path segment, host, or scheme (e.g. id="../admin" or "@evil.com")
         used = set()
         def _sub(m):
             k = m.group(1)
             used.add(k)
-            return str(merged.get(k, m.group(0)))
+            v = merged.get(k)
+            return _quote_seg(v) if k in merged else m.group(0)
         url = self.base_url + _PATH_VAR.sub(_sub, path)
+
+        # the final URL must stay on the configured API's origin and be http(s):
+        # tool args are LLM-controlled, so this is the SSRF / scheme guard.
+        if not _same_origin(url, self.base_url):
+            return {"ok": False, "error": "blocked_off_origin_url"}
 
         rest = {k: v for k, v in merged.items() if k not in used and v is not None}
         body = None
@@ -89,7 +121,7 @@ class RestAdapter(Adapter):
         try:
             req = urlrequest.Request(url, data=payload, headers=headers, method=method)
             try:
-                resp = urlrequest.urlopen(req, timeout=self.timeout)  # noqa: S310 (user-configured API base)
+                resp = _OPENER.open(req, timeout=self.timeout)  # noqa: S310 (origin-checked above)
                 status, ct = resp.status, resp.headers.get("content-type", "")
                 text = resp.read().decode("utf-8", "replace")
             except urlerror.HTTPError as e:  # non-2xx still carries a body
@@ -126,6 +158,20 @@ def _filter_cookie(raw: str, prefixes, names) -> str:
         if nm in (names or []) or any(nm.startswith(p) for p in (prefixes or [])):
             keep.append(kv)
     return "; ".join(keep)
+
+
+def _quote_seg(v) -> str:
+    """Percent-quote a path-param value so it can't escape its segment or the
+    URL (slashes, scheme, host). `safe=''` also encodes '/'."""
+    from urllib.parse import quote
+    return quote(str(v), safe="")
+
+
+def _same_origin(url: str, base: str) -> bool:
+    """The built URL must be http(s) and share the base URL's origin — the SSRF
+    guard for LLM-controlled path/query values (blocks file://, other hosts)."""
+    u, b = urlsplit(url), urlsplit(base)
+    return u.scheme in ("http", "https") and (u.scheme, u.hostname, u.port) == (b.scheme, b.hostname, b.port)
 
 
 def _clean(d):

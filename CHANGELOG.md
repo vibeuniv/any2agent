@@ -5,6 +5,23 @@ All notable changes to this project are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Security
+- **Cross-host credential leak fixed** — the REST adapter now strips
+  `Cookie`/`Authorization` on any redirect that changes origin (stdlib
+  `urlopen` re-sent them verbatim to the redirect target, incl. another host).
+- **SSRF hardening** — LLM-controlled path params are percent-encoded and the
+  built URL is origin-checked (http(s) + same scheme/host/port as base_url)
+  before any request, so a tool arg can't reach another host or `file://`.
+- **Code-leak opt-out** — `ANY2AGENT_NO_LLM_SOURCE=1` withholds raw source
+  excerpts from the LLM (parameter-synthesis hints and layer-3 auth analysis);
+  tool names/descriptions/schemas are still sent. Connect now prints a notice
+  when source may be uploaded.
+- **Confused-deputy guard** — `serve` refuses a non-loopback bind when auth is
+  a standing-credential mode (bearer/api_key_header/cookie), since the server
+  would attach its own token for every network client. Override with
+  `ANY2AGENT_TRUST_NETWORK=1`; passthrough auth is exempt.
+- Chat UI `esc()` now also escapes `"` (defense-in-depth).
+
 ### Changed
 - **2 fewer runtime dependencies** (ponytail audit): the REST adapter now uses
   stdlib `urllib` (one synchronous JSON call never needed httpx), and pyyaml

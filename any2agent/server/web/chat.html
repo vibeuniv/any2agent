@@ -151,7 +151,7 @@ var chip=document.getElementById('modelChip'), menu=document.getElementById('mod
 var hero=document.getElementById('hero'), sendBtn=document.getElementById('send'), sub=document.getElementById('sub');
 var convo=[], busy=false;
 
-function esc(s){return (s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+function esc(s){return (s||'').replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function linkify(h){
   function a(u,t){return '<a href="'+u.replace(/"/g,'%22')+'" target="_blank" rel="noopener">'+t+'</a>';}
   h=h.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`\n]+)`/g,'<code>$1</code>');

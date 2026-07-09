@@ -166,7 +166,24 @@ def build_app(cfg: AgentConfig, toolset: ToolSet) -> FastAPI:
     return app
 
 
+_LOOPBACK = ("127.", "localhost", "::1", "0:0:0:0:0:0:0:1")
+_STANDING_CRED = ("bearer", "api_key_header", "cookie")  # server holds the credential
+
+
 def serve(cfg: AgentConfig, toolset: ToolSet, host: Optional[str] = None, port: Optional[int] = None):
     import uvicorn
+    host = host or cfg.host
+    # confused-deputy guard: in the standing-credential auth modes the server
+    # attaches ITS OWN token to every call, so any client that reaches the port
+    # acts as the operator. Refuse a non-loopback bind unless explicitly trusted.
+    # (passthrough mode is exempt — it forwards only the caller's own session.)
+    loopback = any(str(host).startswith(p) for p in _LOOPBACK)
+    if not loopback and (cfg.auth or {}).get("type") in _STANDING_CRED \
+            and os.getenv("ANY2AGENT_TRUST_NETWORK", "").strip() not in ("1", "true", "yes"):
+        raise SystemExit(
+            "[serve] refusing to bind %s with auth.type=%s: the server would attach its own\n"
+            "        credential for every network client (confused deputy). Bind 127.0.0.1,\n"
+            "        switch to passthrough auth, or set ANY2AGENT_TRUST_NETWORK=1 if this network\n"
+            "        is genuinely trusted." % (host, cfg.auth.get("type")))
     app = build_app(cfg, toolset)
-    uvicorn.run(app, host=host or cfg.host, port=int(port or cfg.port))
+    uvicorn.run(app, host=host, port=int(port or cfg.port))

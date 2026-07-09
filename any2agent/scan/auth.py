@@ -246,7 +246,8 @@ def analyze(root: str, use_llm: bool = True, model_id=None) -> Dict[str, Any]:
                            "passthrough; a custom adapter is required.")
 
     low_conf = plan.get("confidence") in ("low",) or plan.get("scheme") == "unknown"
-    if low_conf and use_llm:
+    from ..config import llm_source_allowed
+    if low_conf and use_llm and llm_source_allowed():  # layer 3 uploads auth-source excerpts
         llm = _llm_auth(texts, root, model_id)
         if llm:
             # keep extraction evidence if any
