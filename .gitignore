@@ -40,3 +40,8 @@ marketing/
 
 # macOS noise
 .DS_Store
+
+# stray verification screenshots
+*-console.png
+*-verified.png
+*-dashboard.png
