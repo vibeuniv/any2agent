@@ -116,34 +116,81 @@
   <div class="logo">✦</div>
   <div class="brand"><span class="nm">{{PROJECT}}</span><span class="sub" id="sub">any2agent · API agent</span></div>
   <div class="spacer"></div>
-  <a class="chip" id="evalBadge" href="evals/ui" target="_blank" title="Eval console"
+  <span class="chip" id="langChip" title="Language">한/EN</span>
+  <a class="chip" id="evalBadge" href="evals/ui" target="_blank"
      style="display:none;text-decoration:none"></a>
-  <span class="chip" id="modelChip" title="Change model">model <span class="car">▾</span></span>
+  <span class="chip" id="modelChip" title="Change model"><span id="modelLabel">model</span> <span class="car">▾</span></span>
   <div class="menu" id="modelMenu"></div>
 </header>
 
 <div class="conv">
   <div class="hero" id="hero">
     <div class="ico">✦</div>
-    <h1>{{PROJECT}} agent</h1>
-    <p>Ask anything about your API — I'll call the right endpoints for you.</p>
-    <div class="sugs" id="sugs">
-      <div class="sug">List what I can do</div>
-      <div class="sug">Show recent items</div>
-      <div class="sug">Help me find something</div>
-    </div>
+    <h1 id="heroH">{{PROJECT}} agent</h1>
+    <p id="heroP"></p>
+    <div class="sugs" id="sugs"></div>
   </div>
   <div class="col" id="col"></div>
 </div>
 
 <div class="foot">
   <div class="row">
-    <textarea id="inp" rows="1" placeholder="Type a message…"></textarea>
+    <textarea id="inp" rows="1"></textarea>
     <button class="send" id="send" disabled>➤</button>
   </div>
-  <div class="hint">Write/delete actions ask for confirmation before running.</div>
+  <div class="hint" id="hint"></div>
 </div>
 
+<script>
+// ── i18n: bilingual EN/KO, auto-detected from the browser, toggle persists ──
+var STR = {
+  en: {sub:"any2agent · API agent", intro:"Ask anything about your API — I'll call the right endpoints for you.",
+       sugs:["List what I can do","Show recent items","Help me find something"],
+       placeholder:"Type a message…", hint:"Write/delete actions ask for confirmation before running.",
+       evalConsole:"Eval console", changeModel:"Change model", model:"model",
+       noModels:"No models available — set a provider key (e.g. OPENAI_API_KEY)",
+       notEvaluated:"— not evaluated", liveTrouble:"A tool is failing in live use — open the eval console",
+       runs:"runs", confirmRun:"Run", confirmCancel:"Cancel",
+       fbGood:"Good answer", fbBad:"Needs correction — teach the agent",
+       fbThanks:"Thanks 👍", fbAsk:"What should it have done? (remembered for next time)", fbSave:"Save",
+       fbRemembered:"Remembered ✓ — I'll apply this next time",
+       fbPolicy:"Can't store that (looks like a permission change)", fbNoted:"Thanks — noted"},
+  ko: {sub:"any2agent · API 에이전트", intro:"당신의 API에 대해 무엇이든 물어보세요 — 알맞은 엔드포인트를 대신 호출합니다.",
+       sugs:["무엇을 할 수 있어?","최근 항목 보여줘","찾는 걸 도와줘"],
+       placeholder:"메시지를 입력하세요…", hint:"쓰기/삭제 작업은 실행 전에 확인을 요청합니다.",
+       evalConsole:"검증 콘솔", changeModel:"모델 변경", model:"모델",
+       noModels:"사용 가능한 모델이 없습니다 — 프로바이더 키를 설정하세요 (예: OPENAI_API_KEY)",
+       notEvaluated:"— 미검증", liveTrouble:"실사용 중 실패하는 도구가 있습니다 — 검증 콘솔을 여세요",
+       runs:"회", noKey:"LLM 프로바이더 키가 없습니다. 키(예: OPENAI_API_KEY)를 설정하면 채팅이 활성화됩니다.",
+       confirmRun:"실행", confirmCancel:"취소",
+       fbGood:"좋은 답변", fbBad:"수정 필요 — 에이전트를 가르치기",
+       fbThanks:"고마워요 👍", fbAsk:"어떻게 했어야 하나요? (다음에 반영됩니다)", fbSave:"저장",
+       fbRemembered:"기억했어요 ✓ — 다음부터 반영할게요",
+       fbPolicy:"저장할 수 없어요 (권한 변경처럼 보입니다)", fbNoted:"고마워요 — 기록했어요"}
+};
+var LANG = localStorage.getItem('any2agent_lang') || ((navigator.language||'').slice(0,2)==='ko' ? 'ko' : 'en');
+var T = STR[LANG];
+function applyLang(){
+  T = STR[LANG];
+  document.documentElement.lang = LANG;
+  document.getElementById('sub').textContent = SUBTEXT || T.sub;
+  document.getElementById('heroP').textContent = T.intro;
+  document.getElementById('modelLabel');  // label refreshed by chipLabel()
+  document.getElementById('inp').placeholder = T.placeholder;
+  document.getElementById('hint').textContent = T.hint;
+  document.getElementById('evalBadge').title = T.evalConsole;
+  document.getElementById('modelChip').title = T.changeModel;
+  var sg = document.getElementById('sugs'); sg.innerHTML='';
+  T.sugs.forEach(function(s){var d=document.createElement('div');d.className='sug';d.textContent=s;
+    d.onclick=function(){send(s);}; sg.appendChild(d);});
+  if (typeof chipLabel === 'function') chipLabel();
+  if (typeof refreshBadge === 'function') refreshBadge();
+}
+var SUBTEXT = '';
+document.getElementById('langChip').onclick=function(){
+  LANG = (LANG==='ko'?'en':'ko'); localStorage.setItem('any2agent_lang',LANG); applyLang();
+};
+</script>
 <script>
 var MODELS=[], DEFAULT_ID=null, selectedModelId=localStorage.getItem('any2agent_model')||null;
 var col=document.getElementById('col'), inp=document.getElementById('inp');
@@ -170,11 +217,11 @@ function md(t){
 }
 function chipLabel(){
   var m=MODELS.find(function(x){return x.id===(selectedModelId||DEFAULT_ID);});
-  chip.innerHTML=(m?m.label:'model')+' <span class="car">▾</span>';
+  chip.innerHTML=esc(m?m.label:T.model)+' <span class="car">▾</span>';
 }
 function renderMenu(){
   menu.innerHTML='';
-  if(!MODELS.length){menu.innerHTML='<div class="empty">No models available — set a provider key (e.g. OPENAI_API_KEY)</div>';return;}
+  if(!MODELS.length){menu.innerHTML='<div class="empty">'+esc(T.noModels)+'</div>';return;}
   MODELS.forEach(function(m){
     var on=m.id===(selectedModelId||DEFAULT_ID);
     var d=document.createElement('div'); d.className='mi'+(on?' sel':'');
@@ -189,22 +236,21 @@ document.addEventListener('click',function(){menu.classList.remove('open');});
 
 fetch('info').then(function(r){return r.json();}).then(function(d){
   MODELS=d.models||[]; DEFAULT_ID=d.default_model_id; chipLabel();
-  if(d.project) sub.textContent='any2agent · '+(d.tools||0)+' tools';
+  if(d.project){ SUBTEXT='any2agent · '+(d.tools||0)+(LANG==='ko'?' 도구':' tools'); sub.textContent=SUBTEXT; }
 });
 
 // eval trust badge — read-only status from the eval console; hidden on any failure
-fetch('evals').then(function(r){return r.json();}).then(function(d){
-  var b=document.getElementById('evalBadge');
-  var sus=((d.runtime||{}).suspects||[]).length;   // drift warning is always-on
-  if(sus) b.title='A tool is failing in live use — open the eval console';
-  if(!d.evaluated){
-    b.textContent='— not evaluated'+(sus?' ⚠':'');
-    b.style.display='inline-flex';return;
-  }
+var BADGE = null;   // cached /evals so a language toggle can re-render the badge
+function refreshBadge(){
+  var b=document.getElementById('evalBadge'); if(!BADGE) return;
+  var d=BADGE, sus=((d.runtime||{}).suspects||[]).length;
+  if(sus) b.title=T.liveTrouble;
+  if(!d.evaluated){ b.textContent=T.notEvaluated+(sus?' ⚠':''); b.style.display='inline-flex'; return; }
   var L=d.latest||{};
-  b.textContent=(L.passed?'✅ ':'❌ ')+(L.rate||0).toFixed(2)+' · '+(d.history||[]).length+' runs'+(sus?' ⚠':'');
+  b.textContent=(L.passed?'✅ ':'❌ ')+(L.rate||0).toFixed(2)+' · '+(d.history||[]).length+' '+T.runs+(sus?' ⚠':'');
   b.style.display='inline-flex';
-}).catch(function(){});
+}
+fetch('evals').then(function(r){return r.json();}).then(function(d){ BADGE=d; refreshBadge(); }).catch(function(){});
 
 function setBusy(b){busy=b;sendBtn.disabled=b||!inp.value.trim();sendBtn.innerHTML=b?'…':'➤';}
 function addMe(t){hero.style.display='none';var d=document.createElement('div');d.className='turn me';d.innerHTML='<div class="b">'+esc(t)+'</div>';col.appendChild(d);scrollDown();}
@@ -243,17 +289,17 @@ function postFeedback(rating,correction){
 }
 function addFeedback(turn){
   var bar=document.createElement('div'); bar.className='fb';
-  bar.innerHTML='<button class="up" title="Good answer">👍</button>'
-              +'<button class="down" title="Needs correction — teach the agent">👎</button>';
+  bar.innerHTML='<button class="up" title="'+esc(T.fbGood)+'">👍</button>'
+              +'<button class="down" title="'+esc(T.fbBad)+'">👎</button>';
   turn.parentNode.insertBefore(bar,turn.nextSibling);
   bar.querySelector('.up').onclick=function(){
-    postFeedback('up'); bar.classList.add('done'); bar.innerHTML='<span class="ok">Thanks 👍</span>';
+    postFeedback('up'); bar.classList.add('done'); bar.innerHTML='<span class="ok">'+esc(T.fbThanks)+'</span>';
   };
   bar.querySelector('.down').onclick=function(){
     bar.classList.add('open');
     var ed=document.createElement('div'); ed.className='fb-edit';
-    ed.innerHTML='<input placeholder="What should it have done? (remembered for next time)">'
-                +'<button>Save</button>';
+    ed.innerHTML='<input placeholder="'+esc(T.fbAsk)+'">'
+                +'<button>'+esc(T.fbSave)+'</button>';
     bar.parentNode.insertBefore(ed,bar.nextSibling);
     var box=ed.querySelector('input'); box.focus();
     function save(){
@@ -261,9 +307,9 @@ function addFeedback(turn){
       ed.remove();
       postFeedback('down',v).then(function(res){
         bar.classList.add('done');
-        bar.innerHTML='<span class="ok">'+(res&&res.remembered?'Remembered ✓ — I\'ll apply this next time'
-                      : (res&&res.reason==='looks_like_policy'?'Can\'t store that (looks like a permission change)'
-                      : 'Thanks — noted'))+'</span>';
+        bar.innerHTML='<span class="ok">'+(res&&res.remembered?T.fbRemembered
+                      : (res&&res.reason==='looks_like_policy'?T.fbPolicy
+                      : T.fbNoted))+'</span>';
       });
     }
     ed.querySelector('button').onclick=save;
@@ -274,17 +320,18 @@ function addFeedback(turn){
 function renderConfirm(ev,after){
   var d=document.createElement('div');d.className='confirm';
   d.innerHTML='<div class="msg">'+esc(ev.message||('Confirm: '+ev.name))+'</div>'
-    +'<button class="yes">Run</button><button class="no">Cancel</button>';
+    +'<button class="yes">'+esc(T.confirmRun)+'</button><button class="no">'+esc(T.confirmCancel)+'</button>';
   after.parentNode.insertBefore(d,after.nextSibling);scrollDown();
   d.querySelector('.yes').onclick=function(){
-    d.querySelector('.msg').textContent='Running…';
+    d.querySelector('.msg').textContent=(LANG==='ko'?'실행 중…':'Running…');
     fetch('confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:ev.name,args:ev.args})})
     .then(function(r){return r.json();}).then(function(res){
-      d.innerHTML='<div class="msg">✅ Done: '+esc(JSON.stringify(res).slice(0,400))+'</div>';
+      d.innerHTML='<div class="msg">✅ '+(LANG==='ko'?'완료':'Done')+': '+esc(JSON.stringify(res).slice(0,400))+'</div>';
     });
   };
-  d.querySelector('.no').onclick=function(){d.innerHTML='<div class="msg" style="color:var(--mut)">Cancelled.</div>';};
+  d.querySelector('.no').onclick=function(){d.innerHTML='<div class="msg" style="color:var(--mut)">'+(LANG==='ko'?'취소됨.':'Cancelled.')+'</div>';};
 }
+applyLang();  // set all static text from the detected/toggled language on load
 
 function autosize(){inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,160)+'px';}
 inp.addEventListener('input',function(){autosize();sendBtn.disabled=busy||!inp.value.trim();});

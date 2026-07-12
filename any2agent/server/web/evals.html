@@ -106,47 +106,112 @@
   <div class="logo">✦</div>
   <div class="brand"><span class="nm">{{PROJECT}}</span><span class="sub">any2agent · eval console</span></div>
   <div class="spacer"></div>
-  <a class="back" href="/">← chat</a>
+  <span class="back" id="langChip" style="cursor:pointer;margin-right:8px">한/EN</span>
+  <a class="back" href="/" id="backChip">← chat</a>
 </header>
 <main id="main"><div class="empty">Loading…</div></main>
 
 <script>
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// ── i18n: bilingual EN/KO, auto-detected, toggle persists ──
+let LANG = localStorage.getItem('any2agent_lang') || ((navigator.language||'').slice(0,2)==='ko' ? 'ko' : 'en');
+const STR = {
+en:{back:"← chat", loading:"Loading…",
+  notChecked:"This agent hasn’t been checked yet.",
+  runToCheck:p=>`Run <code>any2agent eval --project ${p}</code> to test it with real tasks, then refresh.`,
+  workingWell:"Working well", needsAttention:"Needs attention",
+  latest:(n,t)=>`In the latest check, this agent completed <b>${n} of ${t}</b> test task(s)`,
+  someFailed:n=>` — <b>${n} failed</b> (details below).`, lastChecked:a=>` Last checked ${a}.`,
+  confidence:(a,b)=>`95% confidence: <b>${a}%–${b}%</b>`, tooFew:"⚠ too few tasks to trust",
+  kTasksDone:"tasks completed (vs previous check)", kChecks:"checks recorded",
+  kLessons:"lessons guiding the agent now", kSuite:"test tasks in the suite",
+  histTitle:"Check history — taller is better · whisker = confidence range",
+  legPassed:"✓ passed", legBelow:"✗ below gate", legWhisk:"┃ where the true rate likely sits",
+  viewTable:"view as table", thWhen:"when", thDone:"completed", thResult:"result", thFailed:"failed tasks",
+  pass:"✓ pass", fail:"✗ fail", tipDone:(t,p)=>`${t} — completed ${p}%`, tipLikely:(a,b)=>` (likely ${a}–${b}%)`,
+  tipFailed:f=>` · failed: ${f}`,
+  wentWrong:"What went wrong — and what happens next", whenAsked:q=>`When asked: <q>${q}</q>`, taskN:t=>`Task ${t}`,
+  next:"Next:", liveTitle:"Live usage — real conversations, not test runs",
+  keepsFailing:(t,e,c)=>`⚠ <code>${t}</code> keeps failing in live use (${e} of its last ${c} calls)`,
+  confDegraded:p=>`<b>${p}% confident</b> this tool has genuinely degraded (not just bad luck):`,
+  liveNext:p=>`<b>Next:</b> the API behind it may have changed — run <code>any2agent eval --project ${p}</code> to re-verify.`,
+  thTool:"tool", thCalls:"calls", thFailures:"failures", thSpeed:"avg speed", thLast:"last used",
+  recorded:n=>`${n} call(s) recorded. Only tool names and outcomes are logged — never arguments, responses, or user identity.`,
+  learned:"What the agent has learned",
+  learnedNote:"From past failures, these corrections are whispered to the agent on every conversation — each disappears automatically once its task passes a check.",
+  loadFail:"Failed to load /evals.",
+  ago:{now:"just now",min:m=>`${m} min ago`,hr:h=>`${h} hr ago`,day:d=>`${d} days ago`}},
+ko:{back:"← 채팅", loading:"불러오는 중…",
+  notChecked:"이 에이전트는 아직 검증되지 않았습니다.",
+  runToCheck:p=>`<code>any2agent eval --project ${p}</code> 로 실제 태스크로 검증한 뒤 새로고침하세요.`,
+  workingWell:"양호", needsAttention:"주의 필요",
+  latest:(n,t)=>`최근 검증에서 이 에이전트는 테스트 <b>${t}개 중 ${n}개</b>를 완수했습니다`,
+  someFailed:n=>` — <b>${n}개 실패</b> (아래 상세).`, lastChecked:a=>` 마지막 검증 ${a}.`,
+  confidence:(a,b)=>`95% 신뢰구간: <b>${a}%–${b}%</b>`, tooFew:"⚠ 표본이 적어 신뢰 어려움",
+  kTasksDone:"완수율 (직전 대비)", kChecks:"검증 횟수",
+  kLessons:"현재 적용 중인 교훈", kSuite:"테스트 태스크 수",
+  histTitle:"검증 이력 — 높을수록 좋음 · 수염 = 신뢰 범위",
+  legPassed:"✓ 통과", legBelow:"✗ 기준 미달", legWhisk:"┃ 참값이 있을 법한 위치",
+  viewTable:"표로 보기", thWhen:"시각", thDone:"완수율", thResult:"결과", thFailed:"실패 태스크",
+  pass:"✓ 통과", fail:"✗ 실패", tipDone:(t,p)=>`${t} — 완수율 ${p}%`, tipLikely:(a,b)=>` (실제로는 ${a}–${b}%)`,
+  tipFailed:f=>` · 실패: ${f}`,
+  wentWrong:"무엇이 잘못됐고 — 다음에 무엇을 하나", whenAsked:q=>`요청: <q>${q}</q>`, taskN:t=>`태스크 ${t}`,
+  next:"다음:", liveTitle:"실사용 — 테스트가 아닌 실제 대화",
+  keepsFailing:(t,e,c)=>`⚠ <code>${t}</code> 가 실사용에서 계속 실패 중 (최근 ${c}회 중 ${e}회)`,
+  confDegraded:p=>`이 도구가 실제로 고장났을 <b>확신 ${p}%</b> (단순 운 아님):`,
+  liveNext:p=>`<b>다음:</b> 뒤의 API가 바뀌었을 수 있습니다 — <code>any2agent eval --project ${p}</code> 로 재검증하세요.`,
+  thTool:"도구", thCalls:"호출", thFailures:"실패", thSpeed:"평균 속도", thLast:"마지막 사용",
+  recorded:n=>`${n}회 호출 기록됨. 도구명과 결과만 기록되며 인자·응답·사용자 신원은 기록하지 않습니다.`,
+  learned:"에이전트가 배운 것",
+  learnedNote:"과거 실패에서 얻은 이 교정들은 매 대화마다 에이전트에게 주입되며, 해당 태스크가 통과하면 자동으로 사라집니다.",
+  loadFail:"/evals 를 불러오지 못했습니다.",
+  ago:{now:"방금",min:m=>`${m}분 전`,hr:h=>`${h}시간 전`,day:d=>`${d}일 전`}}
+};
+let T = STR[LANG];
 const fmtTs = ts => new Date(ts * 1000).toLocaleString();
 const fmtDay = ts => new Date(ts * 1000).toLocaleDateString(undefined, {month:'numeric', day:'numeric'});
 const ago = ts => {
   const m = Math.round((Date.now()/1000 - ts) / 60);
-  if (m < 2) return 'just now';
-  if (m < 60) return m + ' min ago';
+  if (m < 2) return T.ago.now;
+  if (m < 60) return T.ago.min(m);
   const h = Math.round(m/60);
-  if (h < 48) return h + ' hr ago';
-  return Math.round(h/24) + ' days ago';
+  if (h < 48) return T.ago.hr(h);
+  return T.ago.day(Math.round(h/24));
 };
 
 // failure classes → plain language (what happened + what to do)
-const CAUSE = {
-  wrong_tool:    { what: 'The agent picked the wrong tool for this request.',
-                   act:  'Its tool descriptions were updated to steer it right — re-run the check to confirm.' },
-  bad_args:      { what: 'The agent called a tool with inputs the API rejected.',
-                   act:  'The tool’s parameter schema needs fixing — try `eval --fix`.' },
-  tool_error:    { what: 'The API call itself failed while handling this.',
-                   act:  'Check that the target API is up and the session is valid, then re-run.' },
-  state_mismatch:{ what: 'The agent said it was done, but the expected result was not found afterwards.',
-                   act:  'Inspect the tool’s write behavior — the action may not actually apply.' },
-  answer_gap:    { what: 'The final answer didn’t contain what was asked for.',
-                   act:  'Review the answer against the tool results — it may be ignoring data it fetched.' },
-  other:         { what: 'This failed for an unclassified reason.',
-                   act:  'See the full report (`eval --json`) for details.' },
+const CAUSE_STR = {
+en:{wrong_tool:['The agent picked the wrong tool for this request.','Its tool descriptions were updated to steer it right — re-run the check to confirm.'],
+  bad_args:['The agent called a tool with inputs the API rejected.','The tool’s parameter schema needs fixing — try `eval --fix`.'],
+  tool_error:['The API call itself failed while handling this.','Check that the target API is up and the session is valid, then re-run.'],
+  state_mismatch:['The agent said it was done, but the expected result was not found afterwards.','Inspect the tool’s write behavior — the action may not actually apply.'],
+  answer_gap:['The final answer didn’t contain what was asked for.','Review the answer against the tool results — it may be ignoring data it fetched.'],
+  other:['This failed for an unclassified reason.','See the full report (`eval --json`) for details.']},
+ko:{wrong_tool:['에이전트가 이 요청에 잘못된 도구를 골랐습니다.','도구 설명이 교정되었습니다 — 재검증으로 확인하세요.'],
+  bad_args:['에이전트가 API가 거부한 입력으로 도구를 호출했습니다.','도구의 파라미터 스키마 수정이 필요합니다 — `eval --fix` 를 시도하세요.'],
+  tool_error:['API 호출 자체가 처리 중 실패했습니다.','대상 API가 살아있고 세션이 유효한지 확인 후 재실행하세요.'],
+  state_mismatch:['에이전트는 완료했다고 했지만, 기대한 결과를 이후에 찾지 못했습니다.','도구의 쓰기 동작을 점검하세요 — 실제로 반영되지 않을 수 있습니다.'],
+  answer_gap:['최종 답변에 요청한 내용이 담기지 않았습니다.','도구 결과와 답변을 대조하세요 — 가져온 데이터를 무시했을 수 있습니다.'],
+  other:['분류되지 않은 이유로 실패했습니다.','전체 리포트(`eval --json`)에서 상세를 확인하세요.']}
+};
+let CAUSE = CAUSE_STR[LANG];
+
+let DATA = null;   // cached /evals so a language toggle re-renders without refetch
+document.getElementById('langChip').onclick = () => {
+  LANG = (LANG==='ko'?'en':'ko'); localStorage.setItem('any2agent_lang', LANG);
+  T = STR[LANG]; CAUSE = CAUSE_STR[LANG]; if (DATA) render(DATA);
 };
 
-fetch('/evals').then(r => r.json()).then(d => {
+function render(d){
+  document.documentElement.lang = LANG;
+  document.getElementById('backChip').textContent = T.back;
   const m = document.getElementById('main');
   if (!d.evaluated){
     // never eval'd, but live telemetry (incl. drift warnings) must still show —
     // the runtime signal is always-on, not gated behind a first eval run
-    m.innerHTML = `<div class="empty"><p><b>This agent hasn’t been checked yet.</b></p>
-      <p>Run <code>any2agent eval --project ${esc(d.project)}</code> to test it with real tasks, then refresh.</p></div>`
-      + liveUsageCard(d) + HELP;
+    m.innerHTML = `<div class="empty"><p><b>${T.notChecked}</b></p>
+      <p>${T.runToCheck(esc(d.project))}</p></div>`
+      + liveUsageCard(d) + HELP();
     return;
   }
   const L = d.latest, ok = L.passed, hist = d.history || [];
@@ -159,10 +224,9 @@ fetch('/evals').then(r => r.json()).then(d => {
   let html = `<div class="card hero ${ok?'ok':'bad'}">
     <div class="icon">${ok ? '✅' : '⚠️'}</div>
     <div>
-      <p class="verdict">${ok ? 'Working well' : 'Needs attention'}</p>
-      <p class="plain">In the latest check, this agent completed <b>${passedN} of ${L.rated}</b> test task(s)${
-        ok ? '.' : ` — <b>${(L.failed||[]).length} failed</b> (details below).`}
-        Last checked ${ago(L.ts)}.</p>
+      <p class="verdict">${ok ? T.workingWell : T.needsAttention}</p>
+      <p class="plain">${T.latest(passedN, L.rated)}${
+        ok ? '.' : T.someFailed((L.failed||[]).length)}${T.lastChecked(ago(L.ts))}</p>
     </div></div>`;
 
   // ── KPI row ──
@@ -170,14 +234,14 @@ fetch('/evals').then(r => r.json()).then(d => {
     `<span class="delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '▲' : '▼'}${Math.abs(delta*100).toFixed(0)}%</span>`;
   // confidence interval on the headline rate: the number is an estimate, the band is where the truth likely sits
   const ci = L.rate_ci || [0, 1];
-  const ciTxt = `<div class="l">95% confidence: <b>${Math.round(ci[0]*100)}%–${Math.round(ci[1]*100)}%</b>` +
-    (L.underpowered ? ` · <span class="pw">⚠ too few tasks to trust</span>` : '') + `</div>`;
+  const ciTxt = `<div class="l">${T.confidence(Math.round(ci[0]*100), Math.round(ci[1]*100))}` +
+    (L.underpowered ? ` · <span class="pw">${T.tooFew}</span>` : '') + `</div>`;
   html += `<div class="kpis">
     <div class="kpi"><div class="v">${Math.round((L.rate||0)*100)}%${deltaHtml}</div>
-      <div class="l">tasks completed (vs previous check)</div>${ciTxt}</div>
-    <div class="kpi"><div class="v">${hist.length}</div><div class="l">checks recorded</div></div>
-    <div class="kpi"><div class="v">${(d.lessons||[]).length}</div><div class="l">lessons guiding the agent now</div></div>
-    <div class="kpi"><div class="v">${d.tasks_total}</div><div class="l">test tasks in the suite</div></div>
+      <div class="l">${T.kTasksDone}</div>${ciTxt}</div>
+    <div class="kpi"><div class="v">${hist.length}</div><div class="l">${T.kChecks}</div></div>
+    <div class="kpi"><div class="v">${(d.lessons||[]).length}</div><div class="l">${T.kLessons}</div></div>
+    <div class="kpi"><div class="v">${d.tasks_total}</div><div class="l">${T.kSuite}</div></div>
   </div>`;
 
   // ── run history: column chart (height = completion, status color + ✓/✗ label) ──
@@ -188,35 +252,35 @@ fetch('/evals').then(r => r.json()).then(d => {
     // whisker = the confidence interval: how much this bar could really be higher/lower
     const whisker = c ? `<div class="whisk" style="bottom:${Math.round(c[0]*PLOT_H)}px;height:${Math.max(1,Math.round((c[1]-c[0])*PLOT_H))}px"></div>` : '';
     return `<div class="col">
-      <div class="tip">${fmtTs(e.ts)} — completed ${pct}%${c?` (likely ${Math.round(c[0]*100)}–${Math.round(c[1]*100)}%)`:''}${(e.failed||[]).length ? ' · failed: ' + esc(e.failed.join(', ')) : ''}</div>
+      <div class="tip">${T.tipDone(fmtTs(e.ts), pct)}${c?T.tipLikely(Math.round(c[0]*100),Math.round(c[1]*100)):''}${(e.failed||[]).length ? T.tipFailed(esc(e.failed.join(', '))) : ''}</div>
       <span class="mark ${e.passed?'ok':'bad'}">${e.passed?'✓':'✗'}</span>
       <div class="barwrap" style="height:${PLOT_H}px">
         <div class="bar ${e.passed?'ok':'bad'}" style="height:${Math.max(4, Math.round(pct * PLOT_H / 100))}px"></div>${whisker}</div>
       <span class="when">${fmtDay(e.ts)}</span>
     </div>`;
   }).join('');
-  html += `<div class="card"><h2>Check history — taller is better · whisker = confidence range</h2>
+  html += `<div class="card"><h2>${T.histTitle}</h2>
     <div class="chart">${cols}</div><div class="axis"></div>
-    <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>✓ passed</span>
-    <span><span class="sw" style="background:var(--bad)"></span>✗ below gate</span>
-    <span><span class="sw" style="background:var(--mut)"></span>┃ where the true rate likely sits</span></div>
-    <details><summary>view as table</summary><table><thead>
-      <tr><th>when</th><th>completed</th><th>result</th><th>failed tasks</th></tr></thead><tbody>${
+    <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>${T.legPassed}</span>
+    <span><span class="sw" style="background:var(--bad)"></span>${T.legBelow}</span>
+    <span><span class="sw" style="background:var(--mut)"></span>${T.legWhisk}</span></div>
+    <details><summary>${T.viewTable}</summary><table><thead>
+      <tr><th>${T.thWhen}</th><th>${T.thDone}</th><th>${T.thResult}</th><th>${T.thFailed}</th></tr></thead><tbody>${
       hist.slice().reverse().map(e =>
         `<tr><td>${fmtTs(e.ts)}</td><td>${Math.round((e.rate||0)*100)}%</td>
-         <td>${e.passed?'✓ pass':'✗ fail'}</td><td>${esc((e.failed||[]).join(', ') || '—')}</td></tr>`).join('')
+         <td>${e.passed?T.pass:T.fail}</td><td>${esc((e.failed||[]).join(', ') || '—')}</td></tr>`).join('')
     }</tbody></table></details></div>`;
 
   // ── failures: lead with the REQUEST, then plain cause, then the action ──
   const fixes = L.fixes || [];
   if (fixes.length){
-    html += `<div class="card"><h2>What went wrong — and what happens next</h2>` + fixes.map(f => {
+    html += `<div class="card"><h2>${T.wentWrong}</h2>` + fixes.map(f => {
       const c = CAUSE[f.class] || CAUSE.other;
       const req = prompts[f.task_id];
       return `<div class="fail">
-        ${req ? `<p class="req">When asked: <q>${esc(req)}</q></p>` : `<p class="req">Task ${esc(f.task_id)}</p>`}
-        <p class="cause">${esc(c.what)}</p>
-        <p class="action"><b>Next:</b> ${esc(c.act)}</p>
+        ${req ? `<p class="req">${T.whenAsked(esc(req))}</p>` : `<p class="req">${T.taskN(esc(f.task_id))}</p>`}
+        <p class="cause">${esc(c[0])}</p>
+        <p class="action"><b>${T.next}</b> ${esc(c[1])}</p>
       </div>`;
     }).join('') + `</div>`;
   }
@@ -226,101 +290,108 @@ fetch('/evals').then(r => r.json()).then(d => {
 
   // ── lessons in plain terms ──
   if ((d.lessons||[]).length){
-    html += `<div class="card"><h2>What the agent has learned</h2>
-      <p class="note" style="margin:0 0 8px">From past failures, these corrections are whispered to the agent
-      on every conversation — each disappears automatically once its task passes a check.</p>` +
+    html += `<div class="card"><h2>${T.learned}</h2>
+      <p class="note" style="margin:0 0 8px">${T.learnedNote}</p>` +
       d.lessons.map((l, i) => `<div class="lesson"><span class="n">${i+1}.</span><span>${esc(l.guidance)}</span></div>`).join('') +
       `</div>`;
   }
-  html += HELP;
+  html += HELP();
   m.innerHTML = html;
-}).catch(() => {
-  document.getElementById('main').innerHTML = '<div class="empty">Failed to load /evals.</div>' + HELP;
-});
+}
+
+fetch('/evals').then(r => r.json()).then(d => { DATA = d; render(d); })
+  .catch(() => { document.getElementById('main').innerHTML = `<div class="empty">${T.loadFail}</div>` + HELP(); });
 
 // live telemetry card — shown whether or not an eval has ever run
 function liveUsageCard(d){
   const rt = d.runtime || {calls_total: 0};
   if (!(rt.calls_total > 0)) return '';
   const sus = rt.suspects || [];
-  return `<div class="card"><h2>Live usage — real conversations, not test runs</h2>` +
+  return `<div class="card"><h2>${T.liveTitle}</h2>` +
     sus.map(s => {
       const pd = s.p_degraded != null ? Math.round(s.p_degraded*100) : null;
       return `<div class="fail">
-      <p class="req">⚠ <code>${esc(s.tool)}</code> keeps failing in live use
-        (${s.recent_errors} of its last ${s.recent_calls} calls)</p>` +
-      (pd != null ? `<p class="action"><b>${pd}% confident</b> this tool has genuinely degraded (not just bad luck):</p>
+      <p class="req">${T.keepsFailing(esc(s.tool), s.recent_errors, s.recent_calls)}</p>` +
+      (pd != null ? `<p class="action">${T.confDegraded(pd)}</p>
         <div class="pbar"><span style="width:${pd}%"></span></div>` : '') +
-      `<p class="action"><b>Next:</b> the API behind it may have changed — run
-        <code>any2agent eval --project ${esc(d.project)}</code> to re-verify.</p>
+      `<p class="action">${T.liveNext(esc(d.project))}</p>
     </div>`;}).join('') +
-    `<table><thead><tr><th>tool</th><th>calls</th><th>failures</th><th>avg speed</th><th>last used</th></tr></thead><tbody>` +
+    `<table><thead><tr><th>${T.thTool}</th><th>${T.thCalls}</th><th>${T.thFailures}</th><th>${T.thSpeed}</th><th>${T.thLast}</th></tr></thead><tbody>` +
     (rt.tools || []).map(t =>
       `<tr><td><code>${esc(t.tool)}</code></td><td>${t.calls}</td>
        <td>${t.errors ? t.errors + ' (' + Math.round(t.error_rate*100) + '%)' : '—'}</td>
        <td>${t.avg_ms != null ? t.avg_ms + ' ms' : '—'}</td><td>${ago(t.last_ts)}</td></tr>`).join('') +
     `</tbody></table>
-    <p class="note">${rt.calls_total} call(s) recorded. Only tool names and outcomes are logged — never arguments, responses, or user identity.</p></div>`;
+    <p class="note">${T.recorded(rt.calls_total)}</p></div>`;
 }
 
-// always available — how the numbers on this page are made
-const HELP = `<div class="card"><details class="help">
+// always available — how the numbers on this page are made (bilingual)
+const HELP_EN = `<div class="card"><details class="help">
   <summary>How does this work?</summary>
   <p><b>The one idea:</b> doing work is hard, checking it is easy. This console never
   trusts the agent's own words — every claim is graded against independent evidence.</p>
-
   <h3>How a check runs</h3>
   <ol>
-    <li>Realistic test tasks are generated from your tool set (you can edit them —
-        your <code>evals.json</code> always wins).</li>
+    <li>Realistic test tasks are generated from your tool set (edit them — your <code>evals.json</code> always wins).</li>
     <li>Each task runs through the <b>real</b> agent, against your <b>real</b> API.</li>
-    <li>Grading uses three signals, strongest first:
-        <b>world state</b> — the grader calls your API directly to confirm claimed
-        results actually exist; <b>behavior</b> — the required tools must have really
-        been called; <b>an AI judge</b> — advisory only, checks the answer is grounded.</li>
+    <li>Grading uses three signals, strongest first: <b>world state</b> (the grader calls your API
+        directly to confirm claimed results exist), <b>behavior</b> (the required tools really ran),
+        and <b>an AI judge</b> (advisory only).</li>
   </ol>
-
   <h3>Why the score is honest</h3>
-  <p>Things that aren't the agent's fault (provider outages, budget cut-offs,
-  write tasks you didn't consent to) are <b>excluded from the score</b>, and a task
-  that can't be measured is never silently counted as a pass. Leftover test data
-  fails the gate no matter the score.</p>
-
+  <p>Things that aren't the agent's fault (provider outages, budget cut-offs, unconsented write tasks)
+  are <b>excluded from the score</b>; an unmeasurable task is never silently a pass; leftover test
+  data fails the gate regardless.</p>
   <h3>Reading the uncertainty (the numbers are estimates, not facts)</h3>
-  <p>A rate from a handful of tasks is a guess with a margin. We show that margin so you
-  can tell a real result from luck:</p>
   <ul>
-    <li><b>The confidence range / whisker</b> — "88% (likely 52–98%)" means the true skill
-      is probably somewhere in that band. Fewer tasks → wider band. When the band is too
-      wide we mark it <span class="pw">⚠ too few tasks</span>: a "0.8 pass" on 3 tasks really
-      just means "all 3 happened to pass" — run more (<code>--n</code>) before trusting it.</li>
-    <li><b>Comparing two tool sets</b> (<code>eval --compare</code>) — both run the <i>same</i>
-      tasks, and we only count the tasks whose result <i>changed</i>. If just one or two flipped,
-      the verdict is <b>inconclusive</b>: not enough evidence either way, not a tie.</li>
-    <li><b>"X% confident this tool degraded"</b> (Live usage) — a tool failing 6 of its last 10
-      calls could be a rough patch or a real breakage; this is how sure we are it's real,
-      so you don't chase noise.</li>
-    <li><b>The AI judge can vote</b> (<code>--judge-votes 3</code>) — instead of asking one judge
-      once, ask a few and take the majority; the "agreement" tells you how split they were.</li>
+    <li><b>Confidence range / whisker</b> — "88% (likely 52–98%)" is where the true skill probably
+      sits; fewer tasks → wider band. Too wide → <span class="pw">⚠ too few tasks</span>: a "0.8 pass"
+      on 3 tasks just means "all 3 happened to pass."</li>
+    <li><b>Comparing two tool sets</b> (<code>eval --compare</code>) — same tasks, count only the ones
+      whose result <i>changed</i>. One or two flips → <b>inconclusive</b>, not a tie.</li>
+    <li><b>"X% confident this tool degraded"</b> — how sure we are a live failure streak is real, not noise.</li>
+    <li><b>Judge voting</b> (<code>--judge-votes 3</code>) — ask a few judges, take the majority;
+      "agreement" shows how split they were.</li>
   </ul>
-  <p>The strict gate (<code>eval --strict</code>) uses the <i>bottom</i> of the confidence range,
-  so it only passes when you're statistically sure — good for CI.</p>
-
+  <p>The strict gate (<code>eval --strict</code>) uses the <i>bottom</i> of the range — passes only
+  when statistically sure. Good for CI.</p>
   <h3>After a failure</h3>
-  <p>Each failure becomes one plain "what to fix" line. Fixable ones are repaired
-  automatically (<code>eval --fix</code>); the rest become <b>lessons</b> — corrections
-  whispered to the agent in every conversation, which delete themselves once the
-  task passes. Lessons can never loosen confirmation or permission rules.</p>
-
-  <h3>Test runs vs. live usage</h3>
-  <p>Checks are build-time. In real conversations, <b>telemetry</b> logs each tool
-  call (name, outcome, speed — never your data). A tool failing most of its recent
-  live calls is flagged as a <b>suspect</b> — your API probably changed; re-run the
-  check. Recovered tools clear themselves.</p>
-
-  <p>Full guide: <code>docs/HOW-EVAL-WORKS.md</code> in the repo · run a check any
-  time with <code>any2agent eval --project ${esc((window.__project||document.title.split(' ·')[0]))}</code></p>
+  <p>Each failure becomes one "what to fix" line. Fixable ones are auto-repaired (<code>eval --fix</code>);
+  the rest become <b>lessons</b> injected into every chat, self-deleting once the task passes. Lessons
+  can never loosen confirmation or permission rules.</p>
+  <p>Full guide: <code>docs/HOW-EVAL-WORKS.md</code></p>
 </details></div>`;
+const HELP_KO = `<div class="card"><details class="help">
+  <summary>어떻게 검증하나요?</summary>
+  <p><b>한 가지 원리:</b> 일하는 것은 어렵지만 확인은 쉽다. 이 콘솔은 에이전트의 말을 절대
+  믿지 않고 — 모든 주장을 독립적인 증거로 채점합니다.</p>
+  <h3>검증은 이렇게 돌아갑니다</h3>
+  <ol>
+    <li>도구 세트에서 현실적인 테스트 태스크가 생성됩니다 (직접 수정 가능 — <code>evals.json</code>이 우선).</li>
+    <li>각 태스크가 <b>실제</b> 에이전트로, <b>실제</b> API에 대해 실행됩니다.</li>
+    <li>채점은 강한 신호부터 셋: <b>세계 상태</b>(채점기가 API를 직접 호출해 결과 존재 확인),
+        <b>행위</b>(필요한 도구가 실제로 호출됐는지), <b>AI 판정</b>(보조).</li>
+  </ol>
+  <h3>점수가 정직한 이유</h3>
+  <p>에이전트 탓이 아닌 것(프로바이더 장애, 예산 소진, 미동의 쓰기 태스크)은 <b>점수에서 제외</b>되고,
+  측정 불가한 태스크는 절대 조용히 통과 처리되지 않으며, 잔여 테스트 데이터가 있으면 점수와 무관하게 실패합니다.</p>
+  <h3>불확실성 읽기 (숫자는 추정치이지 사실이 아닙니다)</h3>
+  <ul>
+    <li><b>신뢰 범위 / 수염</b> — "88% (실제로는 52–98%)"는 참 실력이 있을 법한 구간, 태스크가 적을수록 넓어짐.
+      너무 넓으면 <span class="pw">⚠ 표본 부족</span>: 3개짜리 "0.8 통과"는 사실 "3개 다 맞았다"일 뿐입니다.</li>
+    <li><b>두 도구 세트 비교</b>(<code>eval --compare</code>) — 같은 태스크로, 결과가 <i>바뀐</i> 것만 셉니다.
+      한두 개만 바뀌면 <b>판단 불가</b>이지 무승부가 아닙니다.</li>
+    <li><b>"이 도구가 고장났을 확신 X%"</b> — 실사용 실패가 진짜인지 노이즈인지의 확신도입니다.</li>
+    <li><b>판정 투표</b>(<code>--judge-votes 3</code>) — 여러 판정자에게 물어 다수결, "일치도"가 얼마나 갈렸는지 보여줍니다.</li>
+  </ul>
+  <p>엄격 게이트(<code>eval --strict</code>)는 신뢰 범위의 <i>하한</i>으로 판정 — 통계적으로 확실할 때만 통과. CI에 적합.</p>
+  <h3>실패 이후</h3>
+  <p>각 실패는 "무엇을 고칠지" 한 줄이 됩니다. 자동 수정 가능한 건 <code>eval --fix</code>로,
+  나머지는 매 대화에 주입되는 <b>교훈</b>이 되어 해당 태스크가 통과하면 스스로 사라집니다.
+  교훈은 확인·권한 규칙을 절대 완화하지 못합니다.</p>
+  <p>전체 가이드: <code>docs/HOW-EVAL-WORKS.md</code></p>
+</details></div>`;
+const HELP = () => (LANG === 'ko' ? HELP_KO : HELP_EN);
 </script>
 </body>
 </html>
