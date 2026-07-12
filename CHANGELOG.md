@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com); versions follow [SemVer](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- **Statistical inference on eval results** (`evals/stats.py`, pure stdlib) — the
+  numbers now carry their uncertainty:
+  - Every rate reports a **Wilson confidence interval** and an **underpowered**
+    flag; the console shows the interval as text, a whisker on each history bar,
+    and a "too few tasks — add N" warning (a "0.8 gate" on 3 tasks is secretly a
+    100%-gate).
+  - `eval --strict` gates on the **CI lower bound ≥ threshold** and a minimum
+    sample instead of the point estimate — opt-in, so the default gate and CI
+    exit codes are unchanged.
+  - `eval --compare` now uses a **paired McNemar exact test** (same tasks, count
+    only the ones that changed verdict) → better / worse / no-difference /
+    **inconclusive** when too few tasks flipped.
+  - `--judge-votes N` samples the LLM judge N times and takes the **majority**,
+    reporting the agreement fraction (default 1 = prior behavior).
+  - Drift suspects gain **P(degraded)** — a beta-binomial posterior that turns
+    "6 of last 10 failed" into calibrated confidence it's real, not noise.
+  - Plain-language explanation of all of this in the console's "How does this
+    work?" panel and docs/HOW-EVAL-WORKS.md — so the numbers are legible, not
+    just formulas.
+
 ## [0.2.0] — 2026-07-09
 
 ### Security

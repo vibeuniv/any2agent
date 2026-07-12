@@ -118,8 +118,11 @@ def summary(state_dir: str, window: int = WINDOW) -> Dict[str, Any]:
             "recent_errors": recent_errors,
         })
         if _is_suspect(recent_errors, len(recent)):
+            from . import stats
             suspects.append({
                 "tool": tool, "recent_errors": recent_errors, "recent_calls": len(recent),
+                # calibrated confidence the true error rate exceeds SUSPECT_RATE
+                "p_degraded": round(stats.beta_binom_gt(recent_errors, len(recent), SUSPECT_RATE), 3),
                 "hint": _SUSPECT_HINT,
             })
     return {"calls_total": len(entries), "tools": tools, "suspects": suspects}

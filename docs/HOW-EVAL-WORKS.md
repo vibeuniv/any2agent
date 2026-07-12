@@ -73,6 +73,35 @@ And the gate fails outright if a write task left un-cleaned test data behind
    Lessons are hints only — they can never loosen the write-confirmation or
    permission rules — and each one deletes itself the moment its task passes.
 
+## Are the numbers trustworthy? (reading the uncertainty)
+
+A completion rate from a handful of tasks is an *estimate*, not a fact — so the
+console and CLI show how much to trust it, in plain terms:
+
+- **Confidence range** — the console shows "88% (likely 52–98%)" and a whisker on
+  each bar. The single percent is the best guess; the range is where the true
+  skill probably lies. **Fewer tasks → wider range.** (Technically a Wilson score
+  interval — accurate even near 0% or 100%.)
+- **"Too few tasks" warning** — with only 3–4 graded tasks, a "0.8 gate" secretly
+  means "everything passed," and a genuinely good agent fails it ~1 time in 3 by
+  luck. The console flags this; `eval` tells you how many more tasks to add.
+- **Strict gate** (`eval --strict`) — gates on the *bottom* of the confidence
+  range instead of the point estimate, and refuses to pass an underpowered run.
+  Use it in CI when a green check must mean "statistically sure," not "lucky."
+- **Comparing tool sets** (`eval --compare`) — runs both on the *same* tasks and
+  counts only the tasks whose verdict **changed** (a paired McNemar test). If just
+  one or two flipped, the answer is **inconclusive** — honestly "not enough
+  evidence," not a coin-flip verdict.
+- **Drift confidence** — "82% confident this tool degraded" turns a raw failure
+  count (6 of the last 10) into how sure we are it's a real breakage vs. a rough
+  patch, so you don't chase noise.
+- **Judge voting** (`--judge-votes 3`) — the LLM judge is non-deterministic, so
+  one opinion is a coin. Ask a few and take the majority; the reported
+  "agreement" says how split they were.
+
+None of this changes *what* is measured — only how honestly the **uncertainty**
+is shown, so you can decide whether to trust a result or gather more data.
+
 ## Test runs vs. real life
 
 The eval is a **build-time** check. Once real conversations flow, **telemetry**

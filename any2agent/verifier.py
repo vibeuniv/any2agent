@@ -146,11 +146,15 @@ def agent_e2e(toolset: ToolSet, probes: List[str], model_id: Optional[str] = Non
             "missed": [c["probe"] for c in rated if not c["ok"]]}
 
 
+MIN_RATED = 5  # strict gate: fewer graded tasks than this is underpowered
+
+
 def task_eval(toolset: ToolSet, adapter: Optional[Adapter], tasks,
               model_id: Optional[str] = None, threshold: float = 0.8,
               write_ok: bool = False,
               verify_ctx: Optional[Dict[str, Any]] = None,
-              judge_model: Optional[str] = None) -> Dict[str, Any]:
+              judge_model: Optional[str] = None,
+              strict: bool = False, judge_votes: int = 1) -> Dict[str, Any]:
     """Run EvalTasks through the real agent loop and grade completion. Skipped
     (passed=None, non-gating) without adapter/key/tasks — same convention as
     agent_e2e. Infra failures (LLM errors, budget) are separated out so they
@@ -173,7 +177,8 @@ def task_eval(toolset: ToolSet, adapter: Optional[Adapter], tasks,
         trace = _runner.run_task(task, toolset, adapter, model_id=model_id,
                                  verify_ctx=verify_ctx, write_ok=write_ok)
         res = _grader.grade(task, trace, toolset, adapter, model_id=model_id,
-                            verify_ctx=verify_ctx, judge_model=judge_model)
+                            verify_ctx=verify_ctx, judge_model=judge_model,
+                            judge_votes=judge_votes)
         if task.kind == "write":
             residue.extend(_runner.run_cleanup(task, toolset, adapter, verify_ctx=verify_ctx))
         # distinct buckets so CI can tell "out of budget" from "infra broke"
@@ -188,14 +193,26 @@ def task_eval(toolset: ToolSet, adapter: Optional[Adapter], tasks,
     # rate denominator: graded tasks whose failure (if any) is the agent's, not infra's
     rated = [r for r in results
              if not r.ungraded and not any(x.startswith("runner:") for x in r.reasons)]
-    rate = (sum(1 for r in rated if r.success) / len(rated)) if rated else 0.0
-    passed = bool(rated) and rate >= threshold and not residue
+    from .evals import stats
+    n_rated = len(rated)
+    n_success = sum(1 for r in rated if r.success)
+    rate = (n_success / n_rated) if rated else 0.0
+    ci_lo, ci_hi = stats.wilson(n_success, n_rated)
+    low_power = stats.underpowered(n_success, n_rated, min_n=MIN_RATED) if rated else True
+    # default gate unchanged (rate>=threshold); --strict adds CI-lower + power
+    if strict:
+        passed = bool(rated) and ci_lo >= threshold and not low_power and not residue
+    else:
+        passed = bool(rated) and rate >= threshold and not residue
     agg = {
         "avg_tool_calls": round(sum(r.metrics.get("tool_calls", 0) for r in rated) / len(rated), 2) if rated else 0,
         "wrong_tool_calls": sum(r.metrics.get("wrong_tool_calls", 0) for r in rated),
         "tool_errors": sum(r.metrics.get("errors", 0) for r in rated),
     }
+    add_needed = stats.tasks_needed(n_success, n_rated, min_n=MIN_RATED) if rated else MIN_RATED
     return {"name": "task_eval", "passed": passed, "rate": round(rate, 3),
+            "rate_ci": [round(ci_lo, 3), round(ci_hi, 3)], "underpowered": low_power,
+            "min_rated": MIN_RATED, "strict": strict, "add_tasks_for_power": add_needed,
             "threshold": threshold, "rated": len(rated),
             "results": [r.to_dict() for r in results],
             "skipped_write": skipped_write, "skipped_budget": skipped_budget,

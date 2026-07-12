@@ -107,7 +107,9 @@ What you'll see:
 | `--n 8` / `--threshold 0.8` / `--budget 40` | task count / gate / LLM call cap |
 | `--json report.json` | full report for CI artifacts |
 | `--model` / `--judge-model` | model under test / judge model |
-| `--compare old.toolspec.json` | A/B an older toolset on the same tasks; prints a keep/revert verdict |
+| `--compare old.toolspec.json` | A/B an older toolset on the same tasks; paired McNemar verdict (better/worse/inconclusive) |
+| `--strict` | Gate on the confidence-interval lower bound + a minimum sample (statistically sound; use in CI) |
+| `--judge-votes N` | Sample the LLM judge N times per task and take the majority (steadier than one draw) |
 
 **Exit codes (CI-ready):** `0` gate passed · `1` below threshold · `2` cannot run
 (no key / no base_url). Failure classes you'll see: `wrong_tool`, `bad_args`,

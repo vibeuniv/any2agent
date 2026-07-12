@@ -57,6 +57,11 @@
   .col .mark{font-size:11px;font-weight:800}
   .col .mark.ok{color:var(--ok)} .col .mark.bad{color:var(--bad)}
   .col .when{font-size:10px;color:var(--mut);white-space:nowrap}
+  .barwrap{position:relative;width:100%;display:flex;align-items:flex-end}
+  .whisk{position:absolute;left:50%;width:2px;transform:translateX(-50%);background:var(--mut);opacity:.55;border-radius:1px}
+  .pw{color:var(--warn);font-weight:700}
+  .pbar{height:7px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:4px}
+  .pbar > span{display:block;height:100%;background:var(--bad)}
   .col .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
             background:var(--ink);color:var(--bg);font-size:11.5px;border-radius:8px;padding:6px 10px;
             white-space:nowrap;z-index:5;box-shadow:var(--shadow)}
@@ -93,7 +98,7 @@
   .help h3{font-size:13px;margin:14px 0 4px}
   .help p, .help li{font-size:13px;color:var(--mut);margin:4px 0}
   .help b{color:var(--ink)}
-  .help ol{padding-left:20px;margin:4px 0}
+  .help ol,.help ul{padding-left:20px;margin:4px 0}
 </style>
 </head>
 <body>
@@ -163,8 +168,13 @@ fetch('/evals').then(r => r.json()).then(d => {
   // ── KPI row ──
   const deltaHtml = delta === null ? '' :
     `<span class="delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '▲' : '▼'}${Math.abs(delta*100).toFixed(0)}%</span>`;
+  // confidence interval on the headline rate: the number is an estimate, the band is where the truth likely sits
+  const ci = L.rate_ci || [0, 1];
+  const ciTxt = `<div class="l">95% confidence: <b>${Math.round(ci[0]*100)}%–${Math.round(ci[1]*100)}%</b>` +
+    (L.underpowered ? ` · <span class="pw">⚠ too few tasks to trust</span>` : '') + `</div>`;
   html += `<div class="kpis">
-    <div class="kpi"><div class="v">${Math.round((L.rate||0)*100)}%${deltaHtml}</div><div class="l">tasks completed (vs previous check)</div></div>
+    <div class="kpi"><div class="v">${Math.round((L.rate||0)*100)}%${deltaHtml}</div>
+      <div class="l">tasks completed (vs previous check)</div>${ciTxt}</div>
     <div class="kpi"><div class="v">${hist.length}</div><div class="l">checks recorded</div></div>
     <div class="kpi"><div class="v">${(d.lessons||[]).length}</div><div class="l">lessons guiding the agent now</div></div>
     <div class="kpi"><div class="v">${d.tasks_total}</div><div class="l">test tasks in the suite</div></div>
@@ -174,17 +184,22 @@ fetch('/evals').then(r => r.json()).then(d => {
   const PLOT_H = 104; // fixed plot height in px so bar length encodes the value truthfully
   const cols = hist.slice(-12).map(e => {
     const pct = Math.round((e.rate||0)*100);
+    const c = e.rate_ci || null;
+    // whisker = the confidence interval: how much this bar could really be higher/lower
+    const whisker = c ? `<div class="whisk" style="bottom:${Math.round(c[0]*PLOT_H)}px;height:${Math.max(1,Math.round((c[1]-c[0])*PLOT_H))}px"></div>` : '';
     return `<div class="col">
-      <div class="tip">${fmtTs(e.ts)} — completed ${pct}%${(e.failed||[]).length ? ' · failed: ' + esc(e.failed.join(', ')) : ''}</div>
+      <div class="tip">${fmtTs(e.ts)} — completed ${pct}%${c?` (likely ${Math.round(c[0]*100)}–${Math.round(c[1]*100)}%)`:''}${(e.failed||[]).length ? ' · failed: ' + esc(e.failed.join(', ')) : ''}</div>
       <span class="mark ${e.passed?'ok':'bad'}">${e.passed?'✓':'✗'}</span>
-      <div class="bar ${e.passed?'ok':'bad'}" style="height:${Math.max(4, Math.round(pct * PLOT_H / 100))}px"></div>
+      <div class="barwrap" style="height:${PLOT_H}px">
+        <div class="bar ${e.passed?'ok':'bad'}" style="height:${Math.max(4, Math.round(pct * PLOT_H / 100))}px"></div>${whisker}</div>
       <span class="when">${fmtDay(e.ts)}</span>
     </div>`;
   }).join('');
-  html += `<div class="card"><h2>Check history — taller is better</h2>
+  html += `<div class="card"><h2>Check history — taller is better · whisker = confidence range</h2>
     <div class="chart">${cols}</div><div class="axis"></div>
-    <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>✓ passed the quality gate</span>
-    <span><span class="sw" style="background:var(--bad)"></span>✗ below the gate</span></div>
+    <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>✓ passed</span>
+    <span><span class="sw" style="background:var(--bad)"></span>✗ below gate</span>
+    <span><span class="sw" style="background:var(--mut)"></span>┃ where the true rate likely sits</span></div>
     <details><summary>view as table</summary><table><thead>
       <tr><th>when</th><th>completed</th><th>result</th><th>failed tasks</th></tr></thead><tbody>${
       hist.slice().reverse().map(e =>
@@ -229,12 +244,16 @@ function liveUsageCard(d){
   if (!(rt.calls_total > 0)) return '';
   const sus = rt.suspects || [];
   return `<div class="card"><h2>Live usage — real conversations, not test runs</h2>` +
-    sus.map(s => `<div class="fail">
+    sus.map(s => {
+      const pd = s.p_degraded != null ? Math.round(s.p_degraded*100) : null;
+      return `<div class="fail">
       <p class="req">⚠ <code>${esc(s.tool)}</code> keeps failing in live use
-        (${s.recent_errors} of its last ${s.recent_calls} calls)</p>
-      <p class="action"><b>Next:</b> the API behind it may have changed — run
+        (${s.recent_errors} of its last ${s.recent_calls} calls)</p>` +
+      (pd != null ? `<p class="action"><b>${pd}% confident</b> this tool has genuinely degraded (not just bad luck):</p>
+        <div class="pbar"><span style="width:${pd}%"></span></div>` : '') +
+      `<p class="action"><b>Next:</b> the API behind it may have changed — run
         <code>any2agent eval --project ${esc(d.project)}</code> to re-verify.</p>
-    </div>`).join('') +
+    </div>`;}).join('') +
     `<table><thead><tr><th>tool</th><th>calls</th><th>failures</th><th>avg speed</th><th>last used</th></tr></thead><tbody>` +
     (rt.tools || []).map(t =>
       `<tr><td><code>${esc(t.tool)}</code></td><td>${t.calls}</td>
@@ -266,6 +285,26 @@ const HELP = `<div class="card"><details class="help">
   write tasks you didn't consent to) are <b>excluded from the score</b>, and a task
   that can't be measured is never silently counted as a pass. Leftover test data
   fails the gate no matter the score.</p>
+
+  <h3>Reading the uncertainty (the numbers are estimates, not facts)</h3>
+  <p>A rate from a handful of tasks is a guess with a margin. We show that margin so you
+  can tell a real result from luck:</p>
+  <ul>
+    <li><b>The confidence range / whisker</b> — "88% (likely 52–98%)" means the true skill
+      is probably somewhere in that band. Fewer tasks → wider band. When the band is too
+      wide we mark it <span class="pw">⚠ too few tasks</span>: a "0.8 pass" on 3 tasks really
+      just means "all 3 happened to pass" — run more (<code>--n</code>) before trusting it.</li>
+    <li><b>Comparing two tool sets</b> (<code>eval --compare</code>) — both run the <i>same</i>
+      tasks, and we only count the tasks whose result <i>changed</i>. If just one or two flipped,
+      the verdict is <b>inconclusive</b>: not enough evidence either way, not a tie.</li>
+    <li><b>"X% confident this tool degraded"</b> (Live usage) — a tool failing 6 of its last 10
+      calls could be a rough patch or a real breakage; this is how sure we are it's real,
+      so you don't chase noise.</li>
+    <li><b>The AI judge can vote</b> (<code>--judge-votes 3</code>) — instead of asking one judge
+      once, ask a few and take the majority; the "agreement" tells you how split they were.</li>
+  </ul>
+  <p>The strict gate (<code>eval --strict</code>) uses the <i>bottom</i> of the confidence range,
+  so it only passes when you're statistically sure — good for CI.</p>
 
   <h3>After a failure</h3>
   <p>Each failure becomes one plain "what to fix" line. Fixable ones are repaired

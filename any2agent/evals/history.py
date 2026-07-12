@@ -23,6 +23,8 @@ def append(state_dir: str, rep: Dict[str, Any], fixes=None) -> Dict[str, Any]:
     entry = {
         "ts": int(time.time()),
         "rate": rep.get("rate", 0.0),
+        "rate_ci": rep.get("rate_ci", [0.0, 1.0]),   # Wilson interval for the console error bar
+        "underpowered": bool(rep.get("underpowered")),
         "rated": rep.get("rated", 0),
         "passed": bool(rep.get("passed")),
         "failed": rep.get("failed", []),

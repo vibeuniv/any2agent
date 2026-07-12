@@ -18,7 +18,7 @@ from .model import EvalTask, EvalTrace, EvalResult
 
 def grade(task: EvalTask, trace: EvalTrace, toolset: ToolSet, adapter: Optional[Adapter],
           model_id: Optional[str] = None, verify_ctx: Optional[Dict[str, Any]] = None,
-          judge_model: Optional[str] = None) -> EvalResult:
+          judge_model: Optional[str] = None, judge_votes: int = 1) -> EvalResult:
     r = EvalResult(task_id=task.id, success=False)
     called = [s["tool"] for s in trace.steps]
     called_set = set(called)
@@ -72,7 +72,7 @@ def grade(task: EvalTask, trace: EvalTrace, toolset: ToolSet, adapter: Optional[
     # 5) judge — required when asked for, or when there's no deterministic signal
     need_judge = bool(judge_rubrics) or (not det and not task.expected_tools)
     if need_judge:
-        r.judge = _judge(task, trace, judge_rubrics, judge_model or model_id)
+        r.judge = _judge_voted(task, trace, judge_rubrics, judge_model or model_id, judge_votes)
         if r.judge is None:
             if not det and not task.expected_tools:
                 r.ungraded = True
@@ -133,6 +133,28 @@ Agent's final answer:
 
 _DEFAULT_RUBRIC = ("The agent actually completed the request, the answer is grounded in "
                    "the tool results, and it does not claim to have done things it didn't do.")
+
+
+def _judge_voted(task: EvalTask, trace: EvalTrace, rubrics: List[str],
+                 model_id: Optional[str], votes: int) -> Optional[Dict[str, Any]]:
+    """k independent judge draws → majority + agreement. votes=1 is the old
+    single-draw behavior. A non-deterministic judge's one opinion is a coin;
+    a majority of a few is steadier, and the agreement fraction says how much
+    to trust it."""
+    from . import stats
+    draws, reasons = [], []
+    for _ in range(max(1, votes)):
+        v = _judge(task, trace, rubrics, model_id)
+        if v is None:
+            break                       # no key / budget out → stop collecting
+        draws.append(bool(v["pass"]))
+        reasons.append(v.get("reason", ""))
+    if not draws:
+        return None
+    passed, agreement = stats.vote(draws)
+    # reason from a draw matching the majority verdict
+    reason = next((r for p, r in zip(draws, reasons) if p == passed), reasons[0])
+    return {"pass": passed, "reason": reason, "agreement": round(agreement, 2), "n": len(draws)}
 
 
 def _judge(task: EvalTask, trace: EvalTrace, rubrics: List[str],

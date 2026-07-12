@@ -146,7 +146,8 @@ def cmd_eval(args):
         if not write_ok:
             print("[eval] write tasks disabled — running read tasks only.")
 
-    eval_budget.reset(getattr(args, "budget", None) or 40)
+    _votes = getattr(args, "judge_votes", 1) or 1
+    eval_budget.reset((getattr(args, "budget", None) or 40) * _votes)  # k judge draws per task
     tasks, invalid = eval_tasks.load_or_generate(
         ts, cfg.evals_path(), n=args.n, regen=getattr(args, "regen", False),
         model_id=getattr(args, "model", None))
@@ -182,7 +183,7 @@ def cmd_eval(args):
         if old_invalid:
             print("[compare] %d task(s) not runnable on the OLD toolset (excluded there): %s"
                   % (len(old_invalid), ",".join(iv["id"] for iv in old_invalid[:6])))
-        eval_budget.reset((getattr(args, "budget", None) or 40) * 2)  # two runs share one doubled cap
+        eval_budget.reset((getattr(args, "budget", None) or 40) * 2 * _votes)  # two runs × k votes
         print("[compare] running OLD toolset (%s)…" % compare_path)
         old_rep = V.task_eval(old_ts, adapter, old_tasks, model_id=getattr(args, "model", None),
                               threshold=args.threshold, write_ok=write_ok, verify_ctx=verify_ctx,
@@ -191,7 +192,9 @@ def cmd_eval(args):
 
     rep = V.task_eval(ts, adapter, tasks, model_id=getattr(args, "model", None),
                       threshold=args.threshold, write_ok=write_ok, verify_ctx=verify_ctx,
-                      judge_model=getattr(args, "judge_model", None))
+                      judge_model=getattr(args, "judge_model", None),
+                      strict=getattr(args, "strict", False),
+                      judge_votes=getattr(args, "judge_votes", 1) or 1)
 
     if rep.get("skipped"):
         print("[eval] skipped: %s" % rep["skipped"], file=sys.stderr)
@@ -203,11 +206,15 @@ def cmd_eval(args):
             mark, r["task_id"], r["metrics"].get("tool_calls", 0),
             r["checks_passed"], r["checks_total"]))
     m = rep["metrics"]
-    print("[eval] rate=%.2f (threshold %.2f)  rated=%d  wrong_tool=%d  errors=%d  "
-          "skipped_write=%d  skipped_budget=%d  infra=%d  ungraded=%d"
-          % (rep["rate"], rep["threshold"], rep["rated"], m["wrong_tool_calls"],
-             m["tool_errors"], rep["skipped_write"], rep["skipped_budget"],
-             rep["infra_errors"], rep["ungraded"]))
+    ci = rep.get("rate_ci", [0, 1])
+    power = " ⚠underpowered(+%d tasks for a trustworthy gate)" % rep.get("add_tasks_for_power", 0) \
+        if rep.get("underpowered") else ""
+    print("[eval] rate=%.2f  95%% CI [%.2f, %.2f]  (threshold %.2f%s)  rated=%d%s"
+          % (rep["rate"], ci[0], ci[1], rep["threshold"],
+             ", strict" if rep.get("strict") else "", rep["rated"], power))
+    print("       wrong_tool=%d  errors=%d  skipped_write=%d  skipped_budget=%d  infra=%d  ungraded=%d"
+          % (m["wrong_tool_calls"], m["tool_errors"], rep["skipped_write"],
+             rep["skipped_budget"], rep["infra_errors"], rep["ungraded"]))
     for res in rep["residue"]:
         print("  ⚠ residue (manual cleanup needed): task=%s tool=%s (%s)"
               % (res["task"], res["tool"], res["why"]))
@@ -245,17 +252,30 @@ def cmd_eval(args):
 
     if old_rep is not None and not old_rep.get("skipped"):
         om, nm = old_rep["metrics"], rep["metrics"]
-        print("[compare] old: rate=%.2f avg_tools=%.1f wrong=%d   new: rate=%.2f avg_tools=%.1f wrong=%d"
-              % (old_rep["rate"], om["avg_tool_calls"], om["wrong_tool_calls"],
-                 rep["rate"], nm["avg_tool_calls"], nm["wrong_tool_calls"]))
-        non_inferior = rep["rate"] >= old_rep["rate"] - 0.05
-        fewer_calls = nm["avg_tool_calls"] <= om["avg_tool_calls"]
-        if non_inferior and fewer_calls:
-            print("[compare] verdict: ✅ non-inferior rate AND no more calls — keep the new toolset")
-        elif not non_inferior:
-            print("[compare] verdict: ❌ completion rate regressed — consider reverting to %s" % compare_path)
+        # paired McNemar: same task set, so compare per-task pass/fail. Only the
+        # tasks that CHANGED verdict carry signal (b: old-pass→new-fail, c: reverse).
+        from .evals import stats
+        old_pass = {r["task_id"]: r["success"] for r in old_rep["results"]}
+        b = c = 0
+        for r in rep["results"]:
+            tid = r["task_id"]
+            if tid in old_pass:
+                if old_pass[tid] and not r["success"]:
+                    b += 1
+                elif not old_pass[tid] and r["success"]:
+                    c += 1
+        pval = stats.mcnemar_exact(b, c)
+        print("[compare] old rate=%.2f  new rate=%.2f   changed tasks: %d worse, %d better  (McNemar p=%.2f)"
+              % (old_rep["rate"], rep["rate"], b, c, pval))
+        print("          avg tool-calls: old %.1f → new %.1f" % (om["avg_tool_calls"], nm["avg_tool_calls"]))
+        if b + c < 3:
+            print("[compare] verdict: 🤷 inconclusive — only %d task(s) changed; add tasks (--n) for a real signal" % (b + c))
+        elif c > b and pval < 0.05:
+            print("[compare] verdict: ✅ new toolset significantly better — keep it")
+        elif b > c and pval < 0.05:
+            print("[compare] verdict: ❌ new toolset significantly worse — revert to %s" % compare_path)
         else:
-            print("[compare] verdict: ⚠ rate held but call count grew — inspect per-task metrics (--json)")
+            print("[compare] verdict: ➖ no significant difference — decide on call count / cost")
 
     if getattr(args, "json", None):
         out = {"current": rep, "old": old_rep} if old_rep is not None else rep
@@ -358,6 +378,11 @@ def main(argv=None):
     sp.add_argument("--history", action="store_true", help="Show the last recorded runs and exit")
     sp.add_argument("--fix", action="store_true",
                     help="Auto-apply repair for fixable failures (description rewrite, param synthesis)")
+    sp.add_argument("--strict", action="store_true",
+                    help="Gate on the Wilson CI lower bound ≥ threshold AND a minimum sample "
+                         "(statistically sound; fails 'underpowered' on tiny task sets)")
+    sp.add_argument("--judge-votes", type=int, default=1, metavar="N",
+                    help="Sample the LLM judge N times per task and take the majority (default 1)")
     sp.add_argument("--compare", metavar="OLD_TOOLSPEC",
                     help="A/B: also run the same tasks on an older toolspec and print a verdict")
     sp.set_defaults(func=cmd_eval)
