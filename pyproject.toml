@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "any2agent"
 version = "0.2.0"
-description = "Turn ANY API-backed system into a conversational agent: point it at the system's API contract, run a script, get a working agent."
+description = "Generate agent tools (and an MCP server) from your API — then verify each tool against the live API, repair what breaks, and grade whether a real agent can finish real tasks."
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.9"
@@ -33,6 +33,9 @@ embeddings = ["openai"]
 dotenv = ["python-dotenv"]
 # YAML OpenAPI/Swagger contracts (JSON contracts need nothing).
 yaml = ["pyyaml"]
+# Serve the verified tools as an MCP server (`any2agent mcp`) for Cursor/Claude/etc.
+# The MCP SDK requires Python 3.10+; the core (scan/verify/serve) still runs on 3.9.
+mcp = ["mcp; python_version >= '3.10'"]
 dev = ["pytest", "httpx"]  # httpx: fastapi TestClient only — runtime uses stdlib urllib
 
 [project.scripts]

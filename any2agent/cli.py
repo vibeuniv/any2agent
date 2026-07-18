@@ -304,6 +304,21 @@ def cmd_serve(args):
     serve(cfg, ts, host=host, port=port)
 
 
+def cmd_mcp(args):
+    project = _derive_project(args.project)
+    cfg_path = project + ".any2agent.toml"
+    if not os.path.exists(cfg_path):
+        print("[mcp] %s not found. Run `any2agent init` first." % cfg_path, file=sys.stderr)
+        sys.exit(1)
+    cfg = AgentConfig.load(cfg_path)
+    ts = ToolSet.load(cfg.toolspec_path())
+    from .server.mcp_server import serve_mcp
+    # stdout is the MCP transport — keep it clean, log to stderr only.
+    print("[mcp] %s — serving %d verified tools over stdio" % (cfg.project, len(ts.tools)),
+          file=sys.stderr)
+    serve_mcp(cfg, ts)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="any2agent", description="Turn an API contract into a conversational agent.")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -331,6 +346,10 @@ def main(argv=None):
     sp.add_argument("--host")
     sp.add_argument("--port", type=int)
     sp.set_defaults(func=cmd_serve)
+
+    sp = sub.add_parser("mcp", help="Serve the verified tools as an MCP server (stdio) for Cursor/Claude/etc. [needs any2agent[mcp], Python 3.10+]")
+    sp.add_argument("--project", help="Project name (default: current dir name)")
+    sp.set_defaults(func=cmd_mcp)
 
     sp = sub.add_parser("connect", help="Agentic onboarding: scan a source tree -> verify/repair loop -> agent")
     sp.add_argument("--path", help="Path to the target project source tree")

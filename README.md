@@ -1,10 +1,11 @@
 # any2agent
 
-**Generate agent tools from your API — and prove they actually work.**
+**Generate a verified MCP server from your API — tools proven to actually work.**
 
-Every "OpenAPI → tools" generator hands you tools and hopes for the best.
-any2agent is the one that **runs them against your live API, repairs what breaks,
-and grades whether a real agent can finish real tasks** before you ship.
+Every "OpenAPI → MCP" generator hands you tools and hopes for the best.
+any2agent is the one that **runs each tool against your live API, repairs what
+breaks, and grades whether a real agent can finish real tasks** — *before* you
+plug it into Cursor or Claude.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
@@ -15,7 +16,17 @@ the routes **and how you authenticate users**, and builds a tool set — **witho
 you writing any glue code**. The part nobody else does: it then **checks every
 tool against your live API and repairs what's broken**, **proves a real agent can
 complete real tasks** (`eval`), and **turns each failure into a lesson the agent
-won't repeat**. You get a tool set you can trust — plus a chat UI to try it live.
+won't repeat**.
+
+Then it serves those verified tools **as an MCP server** — plug them straight into
+Cursor, Claude Desktop, or any MCP client:
+
+```bash
+any2agent mcp --project myapi      # stdio MCP server over the verified tool set
+```
+
+(There's also a standalone chat UI — `any2agent serve` — if you just want to try
+the agent without an MCP client.)
 
 ```
 your project ──▶  any2agent connect  ──▶  a chat agent that calls your API
@@ -58,7 +69,8 @@ there. any2agent goes further:
 ## Install
 
 ```bash
-pip install git+https://github.com/vibeuniv/any2agent
+pip install any2agent          # core (scan / verify / eval / chat UI)
+pip install 'any2agent[mcp]'   # + the MCP server (`any2agent mcp`, needs Python 3.10+)
 ```
 
 ---
