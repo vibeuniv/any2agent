@@ -1,17 +1,21 @@
 # any2agent
 
-**Point it at your project. Get a working AI agent.**
+**Generate agent tools from your API — and prove they actually work.**
+
+Every "OpenAPI → tools" generator hands you tools and hopes for the best.
+any2agent is the one that **runs them against your live API, repairs what breaks,
+and grades whether a real agent can finish real tasks** before you ship.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-any2agent turns an existing API-backed project into a chat agent — **without you
-writing any glue code**. It reads your API (from an OpenAPI file *or your source
-code*), works out the routes **and how you authenticate users**, builds a tool
-set, **checks it against your live API**, and serves a chat UI. Then it goes one
-step further: it **proves the agent can complete real tasks** (`eval`) and
-**learns from every failure**.
+any2agent reads your API (from an OpenAPI file *or your source code*), works out
+the routes **and how you authenticate users**, and builds a tool set — **without
+you writing any glue code**. The part nobody else does: it then **checks every
+tool against your live API and repairs what's broken**, **proves a real agent can
+complete real tasks** (`eval`), and **turns each failure into a lesson the agent
+won't repeat**. You get a tool set you can trust — plus a chat UI to try it live.
 
 ```
 your project ──▶  any2agent connect  ──▶  a chat agent that calls your API
