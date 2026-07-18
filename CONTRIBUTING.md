@@ -56,6 +56,19 @@ any2agent/
    `examples/petstore/openapi-min.json` still produces a tool set.
 3. Describe what you changed and (for scanners/auth) which stack you tested against.
 
-## License
+## License & Sign-off (DCO)
 
-By contributing you agree your contributions are licensed under [Apache-2.0](LICENSE).
+any2agent is licensed under [AGPL-3.0-or-later](LICENSE), with a
+[Generated Output Exception](LICENSE-EXCEPTION.txt) so that artifacts you generate
+with the tool stay yours.
+
+By contributing you agree that:
+
+1. Your contribution is licensed under the project's AGPL-3.0-or-later license, and
+2. You grant the project maintainer the right to **also** offer your contribution
+   under a separate commercial license (dual licensing). This keeps commercial
+   licensing possible without needing to track down every contributor later.
+
+Sign off each commit (Developer Certificate of Origin) with `git commit -s`,
+which adds a `Signed-off-by:` line certifying you wrote the code and can submit it
+under the above terms.

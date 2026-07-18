@@ -1,0 +1,33 @@
+any2agent — Generated Output Exception
+Additional permission under GNU AGPL version 3 section 7
+
+⚠️ DRAFT — GOOD-FAITH DRAFT, NOT LEGAL ADVICE. Have a lawyer review the final
+wording before you rely on it. The intent below is what matters; the exact text
+may need adjustment for your jurisdiction.
+
+--------------------------------------------------------------------------------
+
+any2agent is a tool that GENERATES artifacts (tool specifications, MCP servers,
+and related configuration) from a user's own API contract.
+
+As an additional permission under section 7 of the GNU Affero General Public
+License version 3, the copyright holder grants the following:
+
+  The artifacts produced by running any2agent against your own inputs
+  ("Generated Output") are NOT considered a derivative work of any2agent and are
+  NOT subject to the terms of the AGPL. You own your Generated Output and may
+  license and use it however you wish.
+
+  This exception does NOT apply to the any2agent source code itself, nor to any
+  modified version of any2agent. If you modify any2agent and make the modified
+  version available to others over a network (for example, as a hosted service),
+  the AGPL's source-disclosure obligations still apply to the any2agent code.
+
+In short:
+  - Use any2agent locally, generate MCP servers/tools, ship them under any
+    license you want — the AGPL never touches your generated output.
+  - Only re-hosting or re-selling a MODIFIED any2agent as a service triggers the
+    AGPL. For that, contact the copyright holder for a commercial license.
+
+Copyright 2026 vibeuniv. "any2agent" name and logo are marks of the project;
+see NOTICE.

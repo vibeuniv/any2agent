@@ -1,10 +1,18 @@
 any2agent
 Copyright 2026 vibeuniv
 
-This product is licensed under the Apache License, Version 2.0 (the "License");
-see the LICENSE file. You may obtain a copy of the License at
-http://www.apache.org/licenses/LICENSE-2.0
+This program is free software: licensed under the GNU Affero General Public
+License, version 3 or (at your option) any later version (AGPL-3.0-or-later);
+see the LICENSE file, or https://www.gnu.org/licenses/agpl-3.0.html
 
-Trademark notice: the code is Apache-2.0, but the name and logo "any2agent" are
+Additional permission (Generated Output Exception): artifacts you generate by
+running any2agent against your own inputs are NOT covered by the AGPL — you own
+them and may license them freely. See LICENSE-EXCEPTION.txt.
+
+Commercial license: if you want to offer a modified any2agent as a hosted
+service without the AGPL's source-disclosure obligation, contact the copyright
+holder for a commercial license.
+
+Trademark notice: the code is AGPL-3.0, but the name and logo "any2agent" are
 marks of the project. Please do not use them to brand a fork or a hosted service
 in a way that implies it is official or endorsed.

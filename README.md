@@ -2,7 +2,7 @@
 
 **Point it at your project. Get a working AI agent.**
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -307,9 +307,17 @@ valuable contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[Apache-2.0](LICENSE). Ships with **no** vendor data or proprietary tool
+[AGPL-3.0-or-later](LICENSE). Ships with **no** vendor data or proprietary tool
 catalogs — bring your own API.
 
-The **code** is Apache-2.0 — use it, fork it, build on it freely. The **name and
-logo** "any2agent" are the project's marks: please don't use them to brand a
-fork or a hosted service in a way that implies it's official or endorsed.
+- **Use it, fork it, self-host it freely.** Running the CLI locally has zero
+  obligations.
+- **What you generate is yours.** Tool specs / MCP servers you produce with
+  any2agent are *not* covered by the AGPL — see
+  [LICENSE-EXCEPTION.txt](LICENSE-EXCEPTION.txt). Ship them under any license.
+- **Only re-hosting a *modified* any2agent as a service** triggers the AGPL's
+  source-disclosure obligation. Want to do that without opening your source?
+  A commercial license is available — get in touch.
+
+The **name and logo** "any2agent" are the project's marks: please don't use them
+to brand a fork or a hosted service in a way that implies it's official or endorsed.

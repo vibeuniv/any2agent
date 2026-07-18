@@ -7,14 +7,14 @@ name = "any2agent"
 version = "0.2.0"
 description = "Turn ANY API-backed system into a conversational agent: point it at the system's API contract, run a script, get a working agent."
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.9"
 authors = [{ name = "any2agent contributors" }]
 keywords = ["llm", "agent", "openapi", "swagger", "tool-calling", "litellm", "fastapi"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
