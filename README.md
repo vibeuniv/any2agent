@@ -1,11 +1,12 @@
 # any2agent
 
-**Generate a verified MCP server from your API — tools proven to actually work.**
+**Turn your API into agent tools that actually work —
+and won't drown your agent in 200 of them.**
 
-Every "OpenAPI → MCP" generator hands you tools and hopes for the best.
-any2agent is the one that **runs each tool against your live API, repairs what
-breaks, and grades whether a real agent can finish real tasks** — *before* you
-plug it into Cursor or Claude.
+Every "OpenAPI → MCP" generator dumps every endpoint and hopes for the best.
+any2agent **runs each tool against your live API, repairs what breaks, and
+grades whether a real agent can finish real tasks** — then serves **only the
+few it needs**, on demand (MCP, or its own chat).
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
@@ -18,8 +19,11 @@ tool against your live API and repairs what's broken**, **proves a real agent ca
 complete real tasks** (`eval`), and **turns each failure into a lesson the agent
 won't repeat**.
 
-Then it serves those verified tools **as an MCP server** — plug them straight into
-Cursor, Claude Desktop, or any MCP client:
+Then it serves those verified tools to your agent — **as an MCP server** for
+Cursor, Claude Desktop, or any MCP client (or its own chat UI). With a big API it
+**doesn't dump every tool into context**: it advertises a small domain-spread seed
+and lets the agent discover the rest on demand (`search_tools` → the client
+re-fetches the grown list), so tool selection stays accurate:
 
 ```bash
 any2agent mcp --project myapi      # stdio MCP server over the verified tool set
