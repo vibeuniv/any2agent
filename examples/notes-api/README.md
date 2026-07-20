@@ -31,3 +31,11 @@ uvicorn main:app --reload          # in examples/notes-api/  → http://localhos
 export OPENAI_API_KEY=...           # any provider key
 any2agent serve --project notes-api
 ```
+
+Or drive the same verified tools from your own MCP client (Cursor, Claude, …)
+instead of the chat UI — emit an MCP server over stdio:
+
+```bash
+pip install "any2agent[mcp]"        # Python 3.10+
+any2agent mcp --project notes-api    # point your MCP client at this stdio command
+```

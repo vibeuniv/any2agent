@@ -21,5 +21,15 @@ any2agent init --openapi ./openapi-min.json --project petstore --base-url https:
 any2agent serve --project petstore
 ```
 
+## As an MCP server
+
+Same verified tools over MCP stdio, for your own MCP client (Cursor, Claude, …)
+instead of the chat UI:
+
+```bash
+pip install "any2agent[mcp]"          # Python 3.10+
+any2agent mcp --project petstore
+```
+
 `petstore.toolspec.json` and `petstore.any2agent.toml` are generated in the working
 directory (named after `--project`).

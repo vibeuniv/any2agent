@@ -9,7 +9,9 @@ how the result is verified.*
 ```
 your project ──▶ 1 scan ──▶ 2 shape ──▶ 3 auth plan ──▶ 4 verify/repair ──▶ toolspec.json
                                                                                 │
-chat message ──▶ 5 expose to LLM ──▶ 6 confirm gate ──▶ 7 HTTP call ──▶ 8 render back
+                            two outputs ──▶ chat UI (serve) · MCP server (mcp)
+                                                                                │
+chat message / MCP call ──▶ 5 expose to LLM ──▶ 6 confirm gate ──▶ 7 HTTP call ──▶ 8 render back
 ```
 
 ---
@@ -120,7 +122,24 @@ Failures trigger repair: missing routes appended, path params filled
 deterministically, thin schemas/descriptions rewritten by an LLM (budgeted),
 dead tools quarantined. The loop ends in ✅ or an **honest residual report**.
 
-## 6. Runtime — what one chat message triggers
+## 5.5 Output — the verified toolset goes two places
+
+`toolspec.json` is the product, and it's consumed two ways that reuse the *same*
+runtime below (dispatch, confirm gate, passthrough auth, shaped responses):
+
+- **`any2agent serve`** — the built-in chat UI. One message runs the loop in §6.
+- **`any2agent mcp --project <p>`** — a stdio MCP server, so Cursor / Claude
+  Desktop / any MCP client drives the same tools with the same confirm gate.
+
+For a large API the MCP server exposes tools **progressively** so the client's
+context doesn't fill up. Rather than listing all N schemas, it seeds a
+domain-distributed sample plus a `search_tools` tool; when the client calls
+`search_tools`, the matching tools are registered and the server emits
+`tools/list_changed`, so the client re-lists and can now call them with their
+full types and descriptions intact. This is the same `core/toolrag.py` machinery
+§6 step 1 uses for chat — reused, not a second implementation.
+
+## 6. Runtime — what one chat message (or MCP call) triggers
 
 Say the user types **"show my notes"**:
 

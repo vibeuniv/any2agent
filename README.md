@@ -8,6 +8,7 @@ any2agent **runs each tool against your live API, repairs what breaks, and
 grades whether a real agent can finish real tasks** — then serves **only the
 few it needs**, on demand (MCP, or its own chat).
 
+[![PyPI](https://img.shields.io/pypi/v/any2agent.svg)](https://pypi.org/project/any2agent/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -29,6 +30,16 @@ re-fetches the grown list), so tool selection stays accurate:
 any2agent mcp --project myapi      # stdio MCP server over the verified tool set
 ```
 
+Point any MCP client (Cursor, Claude Desktop) at it — `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "myapi": { "command": "any2agent", "args": ["mcp", "--project", "myapi"] }
+  }
+}
+```
+
 (There's also a standalone chat UI — `any2agent serve` — if you just want to try
 the agent without an MCP client.)
 
@@ -42,8 +53,6 @@ your project ──▶  any2agent connect  ──▶  a chat agent that calls yo
 ![any2agent connect — detect auth, scan every route, verify the tool set](docs/demo.gif)
 
 ### The agent it serves
-
-<img src="docs/chat-ui.png" alt="any2agent chat UI" width="100%">
 
 A clean, multi-model chat over **your** API — read tools run instantly, write/delete
 actions pause for confirmation, and every call carries the logged-in user's session.
@@ -65,8 +74,12 @@ there. any2agent goes further:
 | Correctness | trust the output | **verify → repair loop with an honest report** |
 | Does it actually work? | you find out in prod | **`eval`: realistic multi-step tasks through the real agent, graded against your live API** |
 | When it fails | you debug | **failures become one-line fixes + lessons the agent applies in every chat turn** |
+| Big API → agent context | dumps every tool | **seed + `search_tools`, discovered on demand (MCP `tools/list_changed`) — selection stays accurate** |
 | Visibility | logs, maybe | **trust badge + `/evals/ui` console (rate trend, history, what-to-fix)** |
 | Onboarding | manual | **one `connect` command** |
+
+Runs offline, too: tool search falls back to keyword matching (no embeddings), so
+scanning, verifying, and MCP discovery work with a local model (Ollama) or no key at all.
 
 ---
 

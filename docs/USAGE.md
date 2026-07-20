@@ -4,8 +4,8 @@ Point it at your project, get a working, **verified** AI agent. This guide walks
 through every command a user actually runs, in the order you'd run them.
 
 ```
-connect  →  eval  →  serve  →  (chat + eval console)  →  eval --fix / lessons
-   scan·verify·repair   measure    use it            improve, repeat
+connect  →  eval  →  serve · mcp  →  (chat UI / MCP client + eval console)  →  eval --fix / lessons
+   scan·verify·repair   measure       use it anywhere                          improve, repeat
 ```
 
 ---
@@ -13,7 +13,8 @@ connect  →  eval  →  serve  →  (chat + eval console)  →  eval --fix / le
 ## 1. Install & prerequisites
 
 ```bash
-pip install git+https://github.com/vibeuniv/any2agent
+pip install any2agent          # core: scan · verify · eval · serve (Python 3.9+)
+pip install "any2agent[mcp]"   # + the MCP server (any2agent mcp) — needs Python 3.10+
 ```
 
 You need **one** LLM provider key (any of these):
@@ -170,6 +171,46 @@ Embed it in your app: `<iframe src="http://127.0.0.1:8800/" style="width:380px;h
 
 ---
 
+## 4.5 Use it from an MCP client — `any2agent mcp`
+
+The chat UI isn't the only surface. The **same verified toolset** can be exposed
+to Cursor, Claude Desktop, or any MCP client — same safety gate, same session
+passthrough. The chat UI and the MCP server are two outputs of one toolset, not
+two products.
+
+```bash
+pip install "any2agent[mcp]"        # the MCP server needs the [mcp] extra + Python 3.10+
+any2agent mcp --project yourapp     # stdio MCP server (speaks over stdin/stdout)
+```
+
+Register it with your client's `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "yourapp": {
+      "command": "any2agent",
+      "args": ["mcp", "--project", "yourapp"],
+      "cwd": "/path/to/your-project"
+    }
+  }
+}
+```
+
+Cursor reads `.cursor/mcp.json`; Claude Desktop reads its
+`claude_desktop_config.json` — same shape. `cwd` must be the project directory
+that holds `yourapp.toolspec.json`.
+
+**Big API? The client's context won't blow up.** Above ~30 tools the server
+doesn't dump every schema at once: it seeds a domain-distributed sample plus a
+`search_tools` tool. When the client calls `search_tools`, the matching tools
+are registered and the server emits `tools/list_changed`; the client re-lists
+and can call them with full types and descriptions intact. The model discovers
+tools as it needs them instead of reading hundreds up front — the same
+progressive-exposure machinery the chat path uses.
+
+---
+
 ## 5. Eval console (web)
 
 Open **`/evals/ui`** (or click the trust badge). Read-only, no setup:
@@ -205,6 +246,7 @@ any2agent eval --project myapp             # verify: can the agent do real tasks
 any2agent eval --project myapp --history   # am I getting better?
 any2agent eval --project myapp --fix       # auto-repair what's fixable
 any2agent serve --project myapp            # chat UI + eval console
+any2agent mcp --project myapp              # expose the same tools to an MCP client (Cursor/Claude Desktop)
 ```
 
 CI gate example:

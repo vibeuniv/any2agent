@@ -32,7 +32,7 @@ Not lazy about: understanding the problem (read it fully and trace the real flow
 ## any2agent specifics
 
 - The "one runnable check" rule is already institutional here: `pytest tests/` (139+) must stay green, and `any2agent eval` is the product-level check — run it before trusting tool-set changes.
-- House invariants that are NOT bloat (don't "simplify" them away): honest-report counters (skipped/residue/ungraded), alias backward compatibility, the write/danger confirm gate, telemetry's no-raise contract, and graceful no-LLM-key degradation.
+- House invariants that are NOT bloat (don't "simplify" them away): honest-report counters (skipped/residue/ungraded), alias backward compatibility, the write/danger confirm gate, telemetry's no-raise contract, graceful no-LLM-key degradation, and the MCP server's progressive exposure (seed + `search_tools` + `tools/list_changed` past 30 tools — don't dump the whole catalog).
 - No new required dependencies — optional extras only (see pyproject).
 
 ---

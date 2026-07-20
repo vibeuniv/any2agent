@@ -46,6 +46,11 @@ All notable changes to this project are documented here. Format loosely follows
 - Chat UI `esc()` now also escapes `"` (defense-in-depth).
 
 ### Changed
+- **License: Apache-2.0 → AGPL-3.0-or-later**, with a **Generated Output
+  Exception** (LICENSE-EXCEPTION.txt) so the artifacts you generate with the
+  tool stay yours to license freely. Re-hosting a modified any2agent as a
+  service triggers the AGPL's source-disclosure obligation; a separate
+  commercial dual license is available to opt out (see NOTICE).
 - **2 fewer runtime dependencies** (ponytail audit): the REST adapter now uses
   stdlib `urllib` (one synchronous JSON call never needed httpx), and pyyaml
   moved to an optional `[yaml]` extra (only YAML contracts need it — JSON
@@ -58,6 +63,14 @@ All notable changes to this project are documented here. Format loosely follows
   decision ladder (adapted from ponytail, MIT) + this repo's invariants.
 
 ### Added
+- **MCP server output (`any2agent mcp`)** — emit the verified tool set as a
+  Model Context Protocol server over stdio, so any MCP client (Cursor, Claude,
+  …) can drive it. Not a "generate an MCP server" tool — MCP is one output of
+  the verify/repair/curate pipeline. Large APIs expose **progressively**: past
+  30 tools it advertises a domain-spread seed plus a `search_tools` meta-tool,
+  and fires `tools/list_changed` as searches surface more (reuses any2agent's
+  own toolrag ranking, so the client never eats the whole catalog at once).
+  Needs the `any2agent[mcp]` extra and Python 3.10+.
 - **`any2agent migrate`** — modernize curated files after tool shaping:
   rewrites old tool-name references (from aliases + the shaping audit map) in
   `evals.json`, `eval-lessons.json`, and any `--files` JSON. `--dry-run`
@@ -139,6 +152,12 @@ All notable changes to this project are documented here. Format loosely follows
   single-file dashboard at `/evals/ui` showing status, sparkline trend,
   per-failure "what to fix" lines, run history, and active lessons. The server
   never runs or mutates evals — the CLI owns that.
+
+### Fixed
+- **`__version__` now reads from installed package metadata**
+  (`importlib.metadata`) instead of a hardcoded `"0.1.0"` that had drifted from
+  `pyproject.toml`'s `0.2.0`, so the reported version can no longer disagree
+  with the released one.
 
 ## [0.1.0] — initial release
 
